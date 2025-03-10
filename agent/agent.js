@@ -234,83 +234,103 @@ function lockComputer() {
 		return;
 	}
 
-	// Linux command to lock the screen based on desktop environment
-	let command = "";
+	// Check if we're running in a desktop environment
+	if (desktopEnvironment === "unknown") {
+		console.log(
+			"No desktop environment detected. This might be a headless server."
+		);
 
-	// Select the appropriate command based on the detected desktop environment
-	if (desktopEnvironment.includes("GNOME")) {
-		command = "gnome-screensaver-command --lock";
-	} else if (desktopEnvironment.includes("KDE")) {
-		command = "qdbus org.kde.screensaver /ScreenSaver Lock";
-	} else if (desktopEnvironment.includes("XFCE")) {
-		command = "xflock4";
-	} else if (desktopEnvironment.includes("MATE")) {
-		command = "mate-screensaver-command --lock";
-	} else if (desktopEnvironment.includes("Cinnamon")) {
-		command = "cinnamon-screensaver-command --lock";
-	} else {
-		// Try generic commands if desktop environment is unknown
-		const commands = [
-			"xdg-screensaver lock", // Generic for most Linux DEs
-			"loginctl lock-session", // systemd
-			"gnome-screensaver-command --lock", // GNOME
-			"qdbus org.kde.screensaver /ScreenSaver Lock", // KDE
-			"xflock4", // XFCE
-			"i3lock", // i3
-			"slock", // Simple X display locker
-		];
-
-		// Try each command until one succeeds
-		const tryLock = (index) => {
-			if (index >= commands.length) {
+		// Try to detect if X server is running
+		exec("ps aux | grep -i xorg", (error, stdout, stderr) => {
+			if (stdout.includes("Xorg") || stdout.includes("X11")) {
+				console.log("X server detected, attempting to lock screen...");
+				tryLockCommands();
+			} else {
+				console.log(
+					"No X server detected. This appears to be a headless server."
+				);
 				socket.emit("commandResult", {
 					guestId: GUEST_ID,
 					action: "lockComputer",
 					success: false,
-					error: "Could not find a working lock command for this system",
+					error:
+						"This appears to be a headless server without a display. Cannot lock screen.",
 				});
-				return;
 			}
+		});
+		return;
+	}
 
-			exec(commands[index], (error, stdout, stderr) => {
-				if (error) {
-					console.log(`Command ${commands[index]} failed, trying next...`);
-					tryLock(index + 1);
-				} else {
-					console.log("Computer locked");
+	// If we have a desktop environment, try appropriate commands
+	tryLockCommands();
+
+	function tryLockCommands() {
+		// Linux commands to lock the screen for different desktop environments
+		const commands = [
+			// Try to install required packages first if they don't exist
+			"which gnome-screensaver-command || apt-get install -y gnome-screensaver",
+			"which xdg-screensaver || apt-get install -y xdg-utils",
+
+			// Then try various lock commands
+			"loginctl lock-session", // systemd
+			"gnome-screensaver-command --lock", // GNOME
+			"xdg-screensaver lock", // Generic for most Linux DEs
+			"qdbus org.kde.screensaver /ScreenSaver Lock", // KDE
+			"xflock4", // XFCE
+			"mate-screensaver-command --lock", // MATE
+			"cinnamon-screensaver-command --lock", // Cinnamon
+			"i3lock -c 000000", // i3
+			"slock", // Simple X display locker
+
+			// Last resort: blank the screen
+			"xset dpms force off", // Turn off display
+		];
+
+		let successReported = false;
+
+		const tryLock = (index) => {
+			if (index >= commands.length) {
+				if (!successReported) {
 					socket.emit("commandResult", {
 						guestId: GUEST_ID,
 						action: "lockComputer",
-						success: true,
+						success: false,
+						error: "Could not find a working lock command for this system",
 					});
+				}
+				return;
+			}
+
+			console.log(`Trying lock command: ${commands[index]}`);
+			exec(commands[index], (error, stdout, stderr) => {
+				if (error) {
+					console.log(`Command ${commands[index]} failed: ${error.message}`);
+					tryLock(index + 1);
+				} else {
+					console.log(`Command ${commands[index]} executed successfully`);
+
+					// Verify if the screen is actually locked
+					if (commands[index].includes("install")) {
+						// If this was an installation command, continue to the next command
+						tryLock(index + 1);
+					} else {
+						// Report success only once
+						if (!successReported) {
+							successReported = true;
+							console.log("Computer locked");
+							socket.emit("commandResult", {
+								guestId: GUEST_ID,
+								action: "lockComputer",
+								success: true,
+							});
+						}
+					}
 				}
 			});
 		};
 
 		tryLock(0);
-		return;
 	}
-
-	// Execute the command for the detected desktop environment
-	exec(command, (error, stdout, stderr) => {
-		if (error) {
-			console.error(`Error locking computer: ${error.message}`);
-			socket.emit("commandResult", {
-				guestId: GUEST_ID,
-				action: "lockComputer",
-				success: false,
-				error: error.message,
-			});
-			return;
-		}
-
-		console.log("Computer locked");
-		socket.emit("commandResult", {
-			guestId: GUEST_ID,
-			action: "lockComputer",
-			success: true,
-		});
-	});
 }
 
 function unlockComputer() {

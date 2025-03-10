@@ -173,8 +173,23 @@ app.post("/api/send-command", async (req, res) => {
 });
 
 // API endpoint to get all connected guests
-app.get("/api/connected-guests", (req, res) => {
-	return res.json({ guests: Object.keys(guests) });
+app.get("/api/connected-guests", async (req, res) => {
+	try {
+		// Get all guests that are marked as online from the database
+		const onlineGuests = await Guest.find({ status: "online" });
+
+		// Extract guestIds from the database results
+		const guestIds = onlineGuests.map((guest) => guest.guestId);
+
+		// Combine with in-memory guests to ensure we don't miss any
+		const allGuestIds = [...new Set([...Object.keys(guests), ...guestIds])];
+
+		console.log("Returning connected guests:", allGuestIds);
+		return res.json({ guests: allGuestIds });
+	} catch (err) {
+		console.error("Error fetching connected guests:", err);
+		return res.json({ guests: Object.keys(guests) });
+	}
 });
 
 // MongoDB Connection
