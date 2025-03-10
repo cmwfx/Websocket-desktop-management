@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
-package-lock.json
+# Allow root package-lock.json for Heroku
+/*/package-lock.json
 yarn.lock
 
 # Environment variables
