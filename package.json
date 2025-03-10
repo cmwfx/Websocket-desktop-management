@@ -1,0 +1,12 @@
+{
+	"name": "desktop-management-app",
+	"version": "1.0.0",
+	"description": "Desktop Management Web App",
+	"engines": {
+		"node": "18.x"
+	},
+	"scripts": {
+		"start": "cd server && npm start",
+		"heroku-postbuild": "cd client && npm install && npm run build && cd ../server && npm install"
+	}
+}
