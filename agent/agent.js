@@ -8,29 +8,46 @@ const https = require("https");
 // Load environment variables
 dotenv.config();
 
-// Configuration
-const SERVER_URL = process.env.SERVER_URL || "http://localhost:5000";
+// Configuration - hardcode the Heroku URL to ensure it works
+const SERVER_URL = "https://desktop-managemt-8dd667cf9f90.herokuapp.com";
 const GUEST_ID = `guest-${Math.floor(Math.random() * 10000)}`; // Generate a random guest ID
+
+console.log(`Using server URL: ${SERVER_URL}`);
 
 // Test HTTP connectivity to the server
 console.log(`Testing HTTP connectivity to ${SERVER_URL}...`);
 const serverUrl = new URL(SERVER_URL);
+
+// Create appropriate request options
 const options = {
 	hostname: serverUrl.hostname,
-	port: serverUrl.port || 443,
 	path: "/api/connected-guests",
 	method: "GET",
+	rejectUnauthorized: false, // Allow self-signed certificates
 };
 
+// Use the appropriate protocol module
 const req = https.request(options, (res) => {
 	console.log(`HTTP Status: ${res.statusCode}`);
-	res.on("data", (d) => {
-		console.log("Response data:", d.toString());
+	let data = "";
+
+	res.on("data", (chunk) => {
+		data += chunk;
+	});
+
+	res.on("end", () => {
+		console.log("Response data:", data);
+		if (res.statusCode === 200) {
+			console.log("HTTP connectivity test successful!");
+		}
 	});
 });
 
 req.on("error", (error) => {
 	console.error("HTTP Request Error:", error.message);
+	console.error(
+		"This may indicate network connectivity issues or server unavailability."
+	);
 });
 
 req.end();
@@ -79,15 +96,18 @@ let socket;
 function initializeSocketConnection() {
 	console.log(`Attempting to connect to server at: ${SERVER_URL}`);
 
+	// Create socket connection with robust options
 	socket = io(SERVER_URL, {
 		reconnectionAttempts: Infinity,
 		reconnectionDelay: 5000,
-		timeout: 20000,
+		timeout: 30000,
 		transports: ["websocket", "polling"],
 		extraHeaders: {
 			"User-Agent": `Desktop-Management-Agent/${GUEST_ID}`,
 		},
 		forceNew: true,
+		secure: true,
+		rejectUnauthorized: false, // Allow self-signed certificates
 	});
 
 	// Handle connection events
@@ -95,22 +115,30 @@ function initializeSocketConnection() {
 		console.log("Connected to server successfully");
 
 		// Register with the server
-		socket.emit("register", {
+		const registrationData = {
 			guestId: GUEST_ID,
 			hostname,
 			ipAddress,
 			osInfo,
 			desktopEnvironment,
-		});
+		};
+
+		console.log("Sending registration data:", JSON.stringify(registrationData));
+		socket.emit("register", registrationData);
 		console.log("Registration data sent to server");
 	});
 
 	socket.on("connect_error", (error) => {
 		console.error("Connection error:", error.message);
+		console.error("Error details:", error);
 	});
 
 	socket.on("connect_timeout", () => {
 		console.error("Connection timeout");
+	});
+
+	socket.on("error", (error) => {
+		console.error("Socket error:", error);
 	});
 
 	// Handle command execution
