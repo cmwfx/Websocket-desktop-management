@@ -3,6 +3,7 @@ const os = require("os");
 const { exec } = require("child_process");
 const dotenv = require("dotenv");
 const fs = require("fs");
+const https = require("https");
 
 // Load environment variables
 dotenv.config();
@@ -10,6 +11,29 @@ dotenv.config();
 // Configuration
 const SERVER_URL = process.env.SERVER_URL || "http://localhost:5000";
 const GUEST_ID = `guest-${Math.floor(Math.random() * 10000)}`; // Generate a random guest ID
+
+// Test HTTP connectivity to the server
+console.log(`Testing HTTP connectivity to ${SERVER_URL}...`);
+const serverUrl = new URL(SERVER_URL);
+const options = {
+	hostname: serverUrl.hostname,
+	port: serverUrl.port || 443,
+	path: "/api/connected-guests",
+	method: "GET",
+};
+
+const req = https.request(options, (res) => {
+	console.log(`HTTP Status: ${res.statusCode}`);
+	res.on("data", (d) => {
+		console.log("Response data:", d.toString());
+	});
+});
+
+req.on("error", (error) => {
+	console.error("HTTP Request Error:", error.message);
+});
+
+req.end();
 
 // Get system information
 const hostname = os.hostname();
@@ -45,66 +69,100 @@ console.log(`IP Address: ${ipAddress}`);
 console.log(`OS: ${osInfo}`);
 console.log(`Desktop Environment: ${desktopEnvironment}`);
 
-// Connect to the server
-const socket = io(SERVER_URL);
+// Add a delay before connecting to ensure all network interfaces are properly initialized
+console.log("Waiting 5 seconds before connecting to server...");
+setTimeout(initializeSocketConnection, 5000);
 
-// Handle connection events
-socket.on("connect", () => {
-	console.log("Connected to server");
+// Socket.IO connection and event handlers
+let socket;
 
-	// Register with the server
-	socket.emit("register", {
-		guestId: GUEST_ID,
-		hostname,
-		ipAddress,
-		osInfo,
-		desktopEnvironment,
+function initializeSocketConnection() {
+	console.log(`Attempting to connect to server at: ${SERVER_URL}`);
+
+	socket = io(SERVER_URL, {
+		reconnectionAttempts: Infinity,
+		reconnectionDelay: 5000,
+		timeout: 20000,
+		transports: ["websocket", "polling"],
+		extraHeaders: {
+			"User-Agent": `Desktop-Management-Agent/${GUEST_ID}`,
+		},
+		forceNew: true,
 	});
-});
 
-// Handle command execution
-socket.on("executeCommand", (data) => {
-	console.log("Received command:", data);
+	// Handle connection events
+	socket.on("connect", () => {
+		console.log("Connected to server successfully");
 
-	switch (data.action) {
-		case "changePassword":
-			changePassword(data);
-			break;
-		case "lockComputer":
-			lockComputer();
-			break;
-		case "unlockComputer":
-			unlockComputer();
-			break;
-		case "shutdown":
-			shutdownComputer();
-			break;
-		case "restart":
-			restartComputer();
-			break;
-		default:
-			console.log(`Unknown command: ${data.action}`);
-			socket.emit("commandResult", {
-				guestId: GUEST_ID,
-				action: data.action,
-				success: false,
-				error: "Unknown command",
-			});
-	}
-});
+		// Register with the server
+		socket.emit("register", {
+			guestId: GUEST_ID,
+			hostname,
+			ipAddress,
+			osInfo,
+			desktopEnvironment,
+		});
+		console.log("Registration data sent to server");
+	});
 
-// Handle disconnection
-socket.on("disconnect", () => {
-	console.log("Disconnected from server");
+	socket.on("connect_error", (error) => {
+		console.error("Connection error:", error.message);
+	});
 
-	// Try to reconnect
-	setTimeout(() => {
-		socket.connect();
-	}, 5000);
-});
+	socket.on("connect_timeout", () => {
+		console.error("Connection timeout");
+	});
+
+	// Handle command execution
+	socket.on("executeCommand", (data) => {
+		console.log("Received command:", data);
+
+		switch (data.action) {
+			case "changePassword":
+				changePassword(data);
+				break;
+			case "lockComputer":
+				lockComputer();
+				break;
+			case "unlockComputer":
+				unlockComputer();
+				break;
+			case "shutdown":
+				shutdownComputer();
+				break;
+			case "restart":
+				restartComputer();
+				break;
+			default:
+				console.log(`Unknown command: ${data.action}`);
+				socket.emit("commandResult", {
+					guestId: GUEST_ID,
+					action: data.action,
+					success: false,
+					error: "Unknown command",
+				});
+		}
+	});
+
+	// Handle disconnection
+	socket.on("disconnect", () => {
+		console.log("Disconnected from server");
+
+		// Try to reconnect
+		setTimeout(() => {
+			console.log("Attempting to reconnect...");
+			socket.connect();
+		}, 5000);
+	});
+}
 
 // Command implementations
 function changePassword(data) {
+	if (!socket) {
+		console.error("Socket not initialized");
+		return;
+	}
+
 	const { username, newPassword } = data;
 
 	if (!username || !newPassword) {
@@ -143,6 +201,11 @@ function changePassword(data) {
 }
 
 function lockComputer() {
+	if (!socket) {
+		console.error("Socket not initialized");
+		return;
+	}
+
 	// Linux command to lock the screen based on desktop environment
 	let command = "";
 
@@ -223,6 +286,11 @@ function lockComputer() {
 }
 
 function unlockComputer() {
+	if (!socket) {
+		console.error("Socket not initialized");
+		return;
+	}
+
 	// Note: Unlocking a computer programmatically is more complex and may require additional tools
 	console.log("Unlock computer command received, but not implemented");
 	socket.emit("commandResult", {
@@ -234,6 +302,11 @@ function unlockComputer() {
 }
 
 function shutdownComputer() {
+	if (!socket) {
+		console.error("Socket not initialized");
+		return;
+	}
+
 	// Linux command to shutdown
 	const command = "sudo shutdown -h +1 'Remote shutdown initiated'";
 
@@ -259,6 +332,11 @@ function shutdownComputer() {
 }
 
 function restartComputer() {
+	if (!socket) {
+		console.error("Socket not initialized");
+		return;
+	}
+
 	// Linux command to restart
 	const command = "sudo shutdown -r +1 'Remote restart initiated'";
 
@@ -286,6 +364,8 @@ function restartComputer() {
 // Handle process termination
 process.on("SIGINT", () => {
 	console.log("Agent shutting down...");
-	socket.disconnect();
+	if (socket) {
+		socket.disconnect();
+	}
 	process.exit(0);
 });
