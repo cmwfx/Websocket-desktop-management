@@ -49,6 +49,51 @@ const io = socketIo(server, {
 	},
 });
 
+// MongoDB Connection
+const MONGODB_URI =
+	"mongodb+srv://llccmw:Cathe1995!Cmw@desktopmanagement.2z7ak.mongodb.net/?retryWrites=true&w=majority&appName=DesktopManagement";
+
+// Flag to track MongoDB connection status
+let isMongoConnected = false;
+
+// Helper function to safely perform database operations
+async function safeDbOperation(operation, fallback) {
+	if (!isMongoConnected) {
+		console.log("Skipping database operation - MongoDB not connected");
+		return fallback;
+	}
+
+	try {
+		return await operation();
+	} catch (err) {
+		console.error("Database operation failed:", err);
+		return fallback;
+	}
+}
+
+mongoose
+	.connect(MONGODB_URI, {
+		useNewUrlParser: true,
+		useUnifiedTopology: true,
+		serverApi: {
+			version: ServerApiVersion.v1,
+			strict: true,
+			deprecationErrors: true,
+		},
+		// Set a shorter connection timeout to fail faster if MongoDB is unreachable
+		connectTimeoutMS: 5000,
+		// Set a shorter socket timeout
+		socketTimeoutMS: 45000,
+	})
+	.then(() => {
+		console.log("Connected to MongoDB Atlas");
+		isMongoConnected = true;
+	})
+	.catch((err) => {
+		console.error("MongoDB connection error:", err);
+		console.log("Application will continue without database persistence");
+	});
+
 // In-memory registry for guest agents
 const guests = {};
 
