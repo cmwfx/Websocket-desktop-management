@@ -23,15 +23,7 @@ const Dashboard = () => {
 			try {
 				const response = await axios.get("/api/connected-guests");
 				if (response.data.guests) {
-					// Convert array of guest IDs to array of guest objects if necessary
-					const guestObjects = Array.isArray(response.data.guests)
-						? response.data.guests.map((guestId) =>
-								typeof guestId === "string"
-									? { guestId, status: "online" }
-									: guestId
-						  )
-						: [];
-					setGuests(guestObjects);
+					setGuests(response.data.guests);
 				}
 			} catch (error) {
 				console.error("Error fetching guests:", error);
@@ -61,14 +53,9 @@ const Dashboard = () => {
 		});
 
 		socket.on("guestUpdate", (updatedGuests) => {
+			console.log("Received guest update:", updatedGuests);
 			if (Array.isArray(updatedGuests)) {
-				// Convert array of guest IDs to array of guest objects if necessary
-				const guestObjects = updatedGuests.map((guest) =>
-					typeof guest === "string"
-						? { guestId: guest, status: "online" }
-						: guest
-				);
-				setGuests(guestObjects);
+				setGuests(updatedGuests);
 			}
 		});
 

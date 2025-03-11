@@ -110,6 +110,38 @@ mongoose
 // In-memory registry for guest agents
 const guests = {};
 
+// Helper function to get full guest list
+async function getFullGuestList() {
+	try {
+		const fullGuests = await Guest.find({
+			$or: [{ status: "online" }, { guestId: { $in: Object.keys(guests) } }],
+		}).lean();
+
+		const guestList = fullGuests.map((g) => ({
+			...g,
+			status: Object.keys(guests).includes(g.guestId) ? "online" : "offline",
+			lastSeen: Object.keys(guests).includes(g.guestId)
+				? new Date()
+				: g.lastSeen,
+		}));
+
+		return guestList;
+	} catch (error) {
+		console.error("Error getting full guest list:", error);
+		// Fallback to in-memory guests
+		return Object.keys(guests).map((id) => ({
+			guestId: id,
+			status: "online",
+			lastSeen: new Date(),
+			hostname: guests[id].hostname || "Unknown",
+			ipAddress: guests[id].ipAddress || "Unknown",
+			osInfo: guests[id].osInfo || "Unknown",
+			windowsVersion: guests[id].windowsVersion || "Unknown",
+			desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
+		}));
+	}
+}
+
 // Socket.IO connection handling
 io.on("connection", (socket) => {
 	console.log("New client connected:", socket.id);
@@ -195,21 +227,10 @@ io.on("connection", (socket) => {
 				JSON.stringify(verifyGuest.toObject(), null, 2)
 			);
 
-			// Emit the full guest object to all admin clients
-			const fullGuests = await Guest.find({
-				$or: [{ status: "online" }, { guestId: { $in: Object.keys(guests) } }],
-			}).lean();
-
-			const guestList = fullGuests.map((g) => ({
-				...g,
-				status: Object.keys(guests).includes(g.guestId) ? "online" : "offline",
-			}));
-
+			// Get and emit the full guest list
+			const guestList = await getFullGuestList();
 			io.emit("guestUpdate", guestList);
 		}, null);
-
-		// Notify all admin clients about the new guest
-		io.emit("guestUpdate", Object.keys(guests));
 	});
 
 	// Handle command results from guests
@@ -281,22 +302,16 @@ io.on("connection", (socket) => {
 						const savedGuest = await guest.save();
 						console.log(
 							`Updated guest status to offline in database: ${id}`,
-							JSON.stringify(savedGuest)
+							JSON.stringify(savedGuest.toObject(), null, 2)
 						);
 
-						// Verify the update
-						const verifyGuest = await Guest.findOne({ guestId: id });
-						console.log(
-							`Verification - Disconnected guest in database:`,
-							JSON.stringify(verifyGuest)
-						);
+						// Get and emit the full guest list
+						const guestList = await getFullGuestList();
+						io.emit("guestUpdate", guestList);
 					} else {
 						console.log(`Guest ${id} not found in database`);
 					}
 				}, null);
-
-				// Notify all admin clients about the guest disconnection
-				io.emit("guestUpdate", Object.keys(guests));
 				break;
 			}
 		}
