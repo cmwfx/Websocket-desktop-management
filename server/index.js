@@ -127,10 +127,10 @@ io.on("connection", (socket) => {
 
 		console.log(
 			`Guest registration received: ${guestId}`,
-			JSON.stringify(data)
+			JSON.stringify(data, null, 2)
 		);
 
-		// Store the socket connection
+		// Store the socket connection with full guest details
 		guests[guestId] = {
 			id: socket.id,
 			hostname,
@@ -139,7 +139,11 @@ io.on("connection", (socket) => {
 			windowsVersion,
 			desktopEnvironment,
 			registeredAt: new Date(),
+			lastSeen: new Date(),
+			status: "online",
 		};
+
+		console.log(`Updated in-memory guests:`, JSON.stringify(guests, null, 2));
 
 		// Update or create guest in database
 		await safeDbOperation(async () => {
@@ -148,7 +152,7 @@ io.on("connection", (socket) => {
 
 			if (guest) {
 				console.log(`Found existing guest in database: ${guestId}`);
-				// Update existing guest
+				// Update existing guest with all fields
 				guest.status = "online";
 				guest.lastSeen = new Date();
 				guest.hostname = hostname || guest.hostname;
@@ -161,18 +165,18 @@ io.on("connection", (socket) => {
 				const savedGuest = await guest.save();
 				console.log(
 					`Updated existing guest in database: ${guestId}`,
-					JSON.stringify(savedGuest)
+					JSON.stringify(savedGuest.toObject(), null, 2)
 				);
 			} else {
 				console.log(`Creating new guest in database: ${guestId}`);
-				// Create new guest
+				// Create new guest with all fields
 				guest = new Guest({
 					guestId,
-					hostname,
-					ipAddress,
-					osInfo,
-					windowsVersion,
-					desktopEnvironment,
+					hostname: hostname || "Unknown",
+					ipAddress: ipAddress || "Unknown",
+					osInfo: osInfo || "Unknown",
+					windowsVersion: windowsVersion || "Unknown",
+					desktopEnvironment: desktopEnvironment || "Unknown",
 					status: "online",
 					lastSeen: new Date(),
 				});
@@ -180,7 +184,7 @@ io.on("connection", (socket) => {
 				const savedGuest = await guest.save();
 				console.log(
 					`Created new guest in database: ${guestId}`,
-					JSON.stringify(savedGuest)
+					JSON.stringify(savedGuest.toObject(), null, 2)
 				);
 			}
 
@@ -188,8 +192,20 @@ io.on("connection", (socket) => {
 			const verifyGuest = await Guest.findOne({ guestId });
 			console.log(
 				`Verification - Guest in database after registration:`,
-				JSON.stringify(verifyGuest)
+				JSON.stringify(verifyGuest.toObject(), null, 2)
 			);
+
+			// Emit the full guest object to all admin clients
+			const fullGuests = await Guest.find({
+				$or: [{ status: "online" }, { guestId: { $in: Object.keys(guests) } }],
+			}).lean();
+
+			const guestList = fullGuests.map((g) => ({
+				...g,
+				status: Object.keys(guests).includes(g.guestId) ? "online" : "offline",
+			}));
+
+			io.emit("guestUpdate", guestList);
 		}, null);
 
 		// Notify all admin clients about the new guest
@@ -339,22 +355,26 @@ app.get("/api/connected-guests", async (req, res) => {
 	try {
 		console.log("Fetching connected guests...");
 
-		// Get in-memory guests
+		// Get in-memory guests with full details
 		const inMemoryGuestIds = Object.keys(guests);
 		console.log("In-memory guest IDs:", inMemoryGuestIds);
+		console.log("Full in-memory guests:", guests);
 
 		// Get guests from database
 		const dbGuests = await Guest.find({
 			$or: [{ status: "online" }, { guestId: { $in: inMemoryGuestIds } }],
-		});
-		console.log("Database guests:", dbGuests);
+		}).lean();
+		console.log("Database guests:", JSON.stringify(dbGuests, null, 2));
 
 		// Update status of guests based on in-memory state
 		const updatedGuests = dbGuests.map((guest) => {
 			const isConnected = inMemoryGuestIds.includes(guest.guestId);
+			const inMemoryData = guests[guest.guestId] || {};
 			return {
-				...guest.toObject(),
+				...guest,
+				...inMemoryData,
 				status: isConnected ? "online" : "offline",
+				lastSeen: isConnected ? new Date() : guest.lastSeen,
 			};
 		});
 
@@ -366,20 +386,46 @@ app.get("/api/connected-guests", async (req, res) => {
 				guestId: id,
 				status: "online",
 				lastSeen: new Date(),
+				hostname: guests[id].hostname || "Unknown",
+				ipAddress: guests[id].ipAddress || "Unknown",
+				osInfo: guests[id].osInfo || "Unknown",
+				windowsVersion: guests[id].windowsVersion || "Unknown",
+				desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
 			}));
 
 		const allGuests = [...updatedGuests, ...newGuests];
-		console.log("Returning all guests:", allGuests);
+		console.log("Final guest list:", JSON.stringify(allGuests, null, 2));
 
-		res.json({ guests: allGuests });
+		// Ensure all required fields are present
+		const sanitizedGuests = allGuests.map((guest) => ({
+			guestId: guest.guestId,
+			status: guest.status || "unknown",
+			lastSeen: guest.lastSeen || new Date(),
+			hostname: guest.hostname || "Unknown",
+			ipAddress: guest.ipAddress || "Unknown",
+			osInfo: guest.osInfo || "Unknown",
+			windowsVersion: guest.windowsVersion || "Unknown",
+			desktopEnvironment: guest.desktopEnvironment || "Unknown",
+		}));
+
+		res.json({ guests: sanitizedGuests });
 	} catch (error) {
 		console.error("Error fetching guests:", error);
-		// On error, return at least the in-memory guests
+		// On error, return at least the in-memory guests with full details
 		const fallbackGuests = Object.keys(guests).map((id) => ({
 			guestId: id,
 			status: "online",
 			lastSeen: new Date(),
+			hostname: guests[id].hostname || "Unknown",
+			ipAddress: guests[id].ipAddress || "Unknown",
+			osInfo: guests[id].osInfo || "Unknown",
+			windowsVersion: guests[id].windowsVersion || "Unknown",
+			desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
 		}));
+		console.log(
+			"Returning fallback guests:",
+			JSON.stringify(fallbackGuests, null, 2)
+		);
 		res.json({ guests: fallbackGuests });
 	}
 });
