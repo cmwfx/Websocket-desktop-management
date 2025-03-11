@@ -84,7 +84,7 @@ io.on("connection", (socket) => {
 		};
 
 		// Update or create guest in database
-		try {
+		await safeDbOperation(async () => {
 			console.log(`Looking for guest in database: ${guestId}`);
 			let guest = await Guest.findOne({ guestId });
 
@@ -132,9 +132,7 @@ io.on("connection", (socket) => {
 				`Verification - Guest in database after registration:`,
 				JSON.stringify(verifyGuest)
 			);
-		} catch (err) {
-			console.error("Error saving guest to database:", err);
-		}
+		}, null);
 
 		// Notify all admin clients about the new guest
 		io.emit("guestUpdate", Object.keys(guests));
@@ -148,7 +146,7 @@ io.on("connection", (socket) => {
 		);
 
 		// Update command log in database
-		try {
+		await safeDbOperation(async () => {
 			// Find the most recent command log for this guest and action
 			const log = await CommandLog.findOne({
 				guestId: result.guestId,
@@ -182,9 +180,7 @@ io.on("connection", (socket) => {
 				await newLog.save();
 				console.log(`Created new command log for result`);
 			}
-		} catch (err) {
-			console.error("Error logging command result:", err);
-		}
+		}, null);
 
 		// Broadcast the result to admin clients
 		io.emit("commandUpdate", result);
@@ -199,7 +195,7 @@ io.on("connection", (socket) => {
 				console.log(`Guest ${id} disconnected from socket`);
 
 				// Update guest status in database
-				try {
+				await safeDbOperation(async () => {
 					console.log(`Looking for disconnected guest in database: ${id}`);
 					const guest = await Guest.findOne({ guestId: id });
 
@@ -223,9 +219,7 @@ io.on("connection", (socket) => {
 					} else {
 						console.log(`Guest ${id} not found in database`);
 					}
-				} catch (err) {
-					console.error("Error updating guest status:", err);
-				}
+				}, null);
 
 				// Notify all admin clients about the guest disconnection
 				io.emit("guestUpdate", Object.keys(guests));
@@ -246,7 +240,7 @@ app.post("/api/send-command", async (req, res) => {
 	);
 
 	// Log the command to database
-	try {
+	await safeDbOperation(async () => {
 		const log = new CommandLog({
 			guestId,
 			action: commandData.action,
@@ -256,9 +250,7 @@ app.post("/api/send-command", async (req, res) => {
 		});
 		await log.save();
 		console.log(`Command logged to database: ${commandData.action}`);
-	} catch (err) {
-		console.error("Error logging command:", err);
-	}
+	}, null);
 
 	if (guest && guest.id) {
 		// Get the socket by ID and emit the command
@@ -287,6 +279,17 @@ app.post("/api/send-command", async (req, res) => {
 // API endpoint to get all connected guests
 app.get("/api/connected-guests", async (req, res) => {
 	console.log("API call: /api/connected-guests");
+
+	// In-memory guests are the source of truth when database is unavailable
+	const memoryGuestIds = Object.keys(guests);
+	console.log("In-memory guests:", memoryGuestIds);
+
+	// If MongoDB is not connected, return just the in-memory guests
+	if (!isMongoConnected) {
+		console.log("MongoDB not connected, returning only in-memory guests");
+		return res.json({ guests: memoryGuestIds });
+	}
+
 	try {
 		// Get all guests that are marked as online from the database
 		console.log("Querying database for online guests...");
@@ -296,10 +299,6 @@ app.get("/api/connected-guests", async (req, res) => {
 		// Extract guestIds from the database results
 		const dbGuestIds = onlineGuests.map((guest) => guest.guestId);
 		console.log("Guest IDs from database:", dbGuestIds);
-
-		// In-memory guests
-		const memoryGuestIds = Object.keys(guests);
-		console.log("In-memory guests:", memoryGuestIds);
 
 		// Find guests that are in memory but not marked as online in the database
 		// These need to be updated in the database
@@ -382,27 +381,10 @@ app.get("/api/connected-guests", async (req, res) => {
 		return res.status(500).json({
 			error: "Error fetching connected guests",
 			message: err.message,
-			guests: Object.keys(guests), // Fallback to in-memory guests
+			guests: memoryGuestIds, // Fallback to in-memory guests
 		});
 	}
 });
-
-// MongoDB Connection
-const MONGODB_URI =
-	"mongodb+srv://llccmw:Cathe1995!Cmw@desktopmanagement.2z7ak.mongodb.net/?retryWrites=true&w=majority&appName=DesktopManagement";
-
-mongoose
-	.connect(MONGODB_URI, {
-		useNewUrlParser: true,
-		useUnifiedTopology: true,
-		serverApi: {
-			version: ServerApiVersion.v1,
-			strict: true,
-			deprecationErrors: true,
-		},
-	})
-	.then(() => console.log("Connected to MongoDB Atlas"))
-	.catch((err) => console.error("MongoDB connection error:", err));
 
 // Start the server
 const PORT = process.env.PORT || 5000;
