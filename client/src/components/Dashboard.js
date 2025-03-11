@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import axios from "axios";
-import GuestList from "./GuestList";
+import GuestManager from "./GuestManager";
 import CommandPanel from "./CommandPanel";
 
 // Use relative URLs in production:
@@ -22,7 +22,17 @@ const Dashboard = () => {
 		const fetchGuests = async () => {
 			try {
 				const response = await axios.get("/api/connected-guests");
-				setGuests(response.data.guests || []);
+				if (response.data.guests) {
+					// Convert array of guest IDs to array of guest objects if necessary
+					const guestObjects = Array.isArray(response.data.guests)
+						? response.data.guests.map((guestId) =>
+								typeof guestId === "string"
+									? { guestId, status: "online" }
+									: guestId
+						  )
+						: [];
+					setGuests(guestObjects);
+				}
 			} catch (error) {
 				console.error("Error fetching guests:", error);
 			}
@@ -34,20 +44,40 @@ const Dashboard = () => {
 		socket.on("connect", () => {
 			setIsConnected(true);
 			console.log("Connected to server");
+			// Refresh guest list when reconnected
+			fetchGuests();
 		});
 
 		socket.on("disconnect", () => {
 			setIsConnected(false);
 			console.log("Disconnected from server");
+			// Mark all guests as potentially offline when disconnected
+			setGuests((prevGuests) =>
+				prevGuests.map((guest) => ({
+					...guest,
+					status: "unknown",
+				}))
+			);
 		});
 
 		socket.on("guestUpdate", (updatedGuests) => {
-			setGuests(updatedGuests || []);
+			if (Array.isArray(updatedGuests)) {
+				// Convert array of guest IDs to array of guest objects if necessary
+				const guestObjects = updatedGuests.map((guest) =>
+					typeof guest === "string"
+						? { guestId: guest, status: "online" }
+						: guest
+				);
+				setGuests(guestObjects);
+			}
 		});
 
 		socket.on("commandUpdate", (result) => {
 			setCommandResults((prev) => [result, ...prev]);
 		});
+
+		// Set up periodic refresh of guest list
+		const refreshInterval = setInterval(fetchGuests, 30000); // Refresh every 30 seconds
 
 		// Cleanup on unmount
 		return () => {
@@ -55,6 +85,7 @@ const Dashboard = () => {
 			socket.off("disconnect");
 			socket.off("guestUpdate");
 			socket.off("commandUpdate");
+			clearInterval(refreshInterval);
 		};
 	}, []);
 
@@ -92,7 +123,7 @@ const Dashboard = () => {
 
 			<div className="dashboard-content">
 				<div className="dashboard-sidebar">
-					<GuestList
+					<GuestManager
 						guests={guests}
 						selectedGuest={selectedGuest}
 						onSelectGuest={handleGuestSelect}

@@ -49,6 +49,14 @@ const io = socketIo(server, {
 	},
 });
 
+// Start the server after MongoDB connection attempt
+function startServer() {
+	const PORT = process.env.PORT || 5000;
+	server.listen(PORT, () => {
+		console.log(`Server running on port ${PORT}`);
+	});
+}
+
 // MongoDB Connection
 const MONGODB_URI =
 	"mongodb+srv://llccmw:Cathe1995!Cmw@desktopmanagement.2z7ak.mongodb.net/?retryWrites=true&w=majority&appName=DesktopManagement";
@@ -71,6 +79,8 @@ async function safeDbOperation(operation, fallback) {
 	}
 }
 
+// Connect to MongoDB, then start the server
+console.log("Starting application...");
 mongoose
 	.connect(MONGODB_URI, {
 		useNewUrlParser: true,
@@ -88,10 +98,13 @@ mongoose
 	.then(() => {
 		console.log("Connected to MongoDB Atlas");
 		isMongoConnected = true;
+		startServer();
 	})
 	.catch((err) => {
 		console.error("MongoDB connection error:", err);
 		console.log("Application will continue without database persistence");
+		isMongoConnected = false;
+		startServer();
 	});
 
 // In-memory registry for guest agents
@@ -323,116 +336,50 @@ app.post("/api/send-command", async (req, res) => {
 
 // API endpoint to get all connected guests
 app.get("/api/connected-guests", async (req, res) => {
-	console.log("API call: /api/connected-guests");
-
-	// In-memory guests are the source of truth when database is unavailable
-	const memoryGuestIds = Object.keys(guests);
-	console.log("In-memory guests:", memoryGuestIds);
-
-	// If MongoDB is not connected, return just the in-memory guests
-	if (!isMongoConnected) {
-		console.log("MongoDB not connected, returning only in-memory guests");
-		return res.json({ guests: memoryGuestIds });
-	}
-
 	try {
-		// Get all guests that are marked as online from the database
-		console.log("Querying database for online guests...");
-		const onlineGuests = await Guest.find({ status: "online" });
-		console.log("Database query result:", JSON.stringify(onlineGuests));
+		console.log("Fetching connected guests...");
 
-		// Extract guestIds from the database results
-		const dbGuestIds = onlineGuests.map((guest) => guest.guestId);
-		console.log("Guest IDs from database:", dbGuestIds);
+		// Get in-memory guests
+		const inMemoryGuestIds = Object.keys(guests);
+		console.log("In-memory guest IDs:", inMemoryGuestIds);
 
-		// Find guests that are in memory but not marked as online in the database
-		// These need to be updated in the database
-		const guestsToUpdate = memoryGuestIds.filter(
-			(id) => !dbGuestIds.includes(id)
-		);
-
-		if (guestsToUpdate.length > 0) {
-			console.log(
-				"Updating status for guests that are connected but not marked online:",
-				guestsToUpdate
-			);
-
-			// Update these guests in the database
-			for (const guestId of guestsToUpdate) {
-				try {
-					let guest = await Guest.findOne({ guestId });
-
-					if (guest) {
-						// Update existing guest
-						guest.status = "online";
-						guest.lastSeen = new Date();
-						await guest.save();
-						console.log(`Updated guest status to online: ${guestId}`);
-					} else {
-						// This should not happen often, but create a minimal record if needed
-						const guestInfo = guests[guestId];
-						guest = new Guest({
-							guestId,
-							hostname: guestInfo.hostname || "Unknown",
-							ipAddress: guestInfo.ipAddress || "0.0.0.0",
-							osInfo: guestInfo.osInfo || "Unknown",
-							windowsVersion: guestInfo.windowsVersion || "Unknown",
-							desktopEnvironment: guestInfo.desktopEnvironment || "Unknown",
-							status: "online",
-							lastSeen: new Date(),
-						});
-						await guest.save();
-						console.log(`Created missing guest record in database: ${guestId}`);
-					}
-				} catch (err) {
-					console.error(`Error updating guest ${guestId}:`, err);
-				}
-			}
-		}
-
-		// Find guests that are marked as online in the database but not in memory
-		// These need to be marked as offline in the database
-		const guestsToMarkOffline = dbGuestIds.filter(
-			(id) => !memoryGuestIds.includes(id)
-		);
-
-		if (guestsToMarkOffline.length > 0) {
-			console.log(
-				"Marking guests as offline that are not connected:",
-				guestsToMarkOffline
-			);
-
-			// Update these guests in the database
-			for (const guestId of guestsToMarkOffline) {
-				try {
-					const guest = await Guest.findOne({ guestId });
-					if (guest) {
-						guest.status = "offline";
-						guest.lastSeen = new Date();
-						await guest.save();
-						console.log(`Updated guest status to offline: ${guestId}`);
-					}
-				} catch (err) {
-					console.error(`Error updating guest ${guestId}:`, err);
-				}
-			}
-		}
-
-		// After synchronization, the in-memory guests are the source of truth
-		console.log("Returning connected guests:", memoryGuestIds);
-		return res.json({ guests: memoryGuestIds });
-	} catch (err) {
-		console.error("Error fetching connected guests:", err);
-		return res.status(500).json({
-			error: "Error fetching connected guests",
-			message: err.message,
-			guests: memoryGuestIds, // Fallback to in-memory guests
+		// Get guests from database
+		const dbGuests = await Guest.find({
+			$or: [{ status: "online" }, { guestId: { $in: inMemoryGuestIds } }],
 		});
-	}
-});
+		console.log("Database guests:", dbGuests);
 
-// Start the server
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-	console.log(`Server running on port ${PORT}`);
+		// Update status of guests based on in-memory state
+		const updatedGuests = dbGuests.map((guest) => {
+			const isConnected = inMemoryGuestIds.includes(guest.guestId);
+			return {
+				...guest.toObject(),
+				status: isConnected ? "online" : "offline",
+			};
+		});
+
+		// Add any in-memory guests that aren't in the database
+		const dbGuestIds = dbGuests.map((g) => g.guestId);
+		const newGuests = inMemoryGuestIds
+			.filter((id) => !dbGuestIds.includes(id))
+			.map((id) => ({
+				guestId: id,
+				status: "online",
+				lastSeen: new Date(),
+			}));
+
+		const allGuests = [...updatedGuests, ...newGuests];
+		console.log("Returning all guests:", allGuests);
+
+		res.json({ guests: allGuests });
+	} catch (error) {
+		console.error("Error fetching guests:", error);
+		// On error, return at least the in-memory guests
+		const fallbackGuests = Object.keys(guests).map((id) => ({
+			guestId: id,
+			status: "online",
+			lastSeen: new Date(),
+		}));
+		res.json({ guests: fallbackGuests });
+	}
 });
