@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const path = require("path");
+const { ServerApiVersion } = require("mongodb");
 
 // Import routes
 const guestRoutes = require("./routes/guests");
@@ -57,7 +58,14 @@ io.on("connection", (socket) => {
 
 	// Handle guest registration
 	socket.on("register", async (data) => {
-		const { guestId, hostname, ipAddress, osInfo, desktopEnvironment } = data;
+		const {
+			guestId,
+			hostname,
+			ipAddress,
+			osInfo,
+			windowsVersion,
+			desktopEnvironment,
+		} = data;
 		guests[guestId] = socket;
 		console.log(`Guest registered: ${guestId}`);
 
@@ -73,7 +81,9 @@ io.on("connection", (socket) => {
 				guest.osInfo = osInfo || guest.osInfo;
 				guest.desktopEnvironment =
 					desktopEnvironment || guest.desktopEnvironment;
+				guest.windowsVersion = windowsVersion || guest.windowsVersion;
 				await guest.save();
+				console.log(`Updated existing guest in database: ${guestId}`);
 			} else {
 				guest = new Guest({
 					guestId,
@@ -81,9 +91,11 @@ io.on("connection", (socket) => {
 					ipAddress,
 					osInfo,
 					desktopEnvironment,
+					windowsVersion,
 					status: "online",
 				});
 				await guest.save();
+				console.log(`Created new guest in database: ${guestId}`);
 			}
 		} catch (err) {
 			console.error("Error updating guest in database:", err);
@@ -130,6 +142,9 @@ io.on("connection", (socket) => {
 						guest.status = "offline";
 						guest.lastSeen = new Date();
 						await guest.save();
+						console.log(`Updated guest status to offline in database: ${id}`);
+					} else {
+						console.log(`Guest ${id} not found in database`);
 					}
 				} catch (err) {
 					console.error("Error updating guest status:", err);
@@ -188,14 +203,29 @@ app.get("/api/connected-guests", async (req, res) => {
 		return res.json({ guests: allGuestIds });
 	} catch (err) {
 		console.error("Error fetching connected guests:", err);
-		return res.json({ guests: Object.keys(guests) });
+		return res.status(500).json({
+			error: "Error fetching connected guests",
+			message: err.message,
+			guests: Object.keys(guests), // Fallback to in-memory guests
+		});
 	}
 });
 
 // MongoDB Connection
+const MONGODB_URI =
+	"mongodb+srv://llccmw:Cathe1995!Cmw@desktopmanagement.2z7ak.mongodb.net/?retryWrites=true&w=majority&appName=DesktopManagement";
+
 mongoose
-	.connect(process.env.MONGODB_URI)
-	.then(() => console.log("Connected to MongoDB"))
+	.connect(MONGODB_URI, {
+		useNewUrlParser: true,
+		useUnifiedTopology: true,
+		serverApi: {
+			version: ServerApiVersion.v1,
+			strict: true,
+			deprecationErrors: true,
+		},
+	})
+	.then(() => console.log("Connected to MongoDB Atlas"))
 	.catch((err) => console.error("MongoDB connection error:", err));
 
 // Start the server
