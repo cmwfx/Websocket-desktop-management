@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import GuestManager from "./GuestManager";
 import CommandPanel from "./CommandPanel";
+import ComputerRental from "./ComputerRental";
 import "../styles/dashboard.css";
 
 // Use relative URLs in production:
@@ -114,6 +115,9 @@ const Dashboard = () => {
 		setShowUserMenu(!showUserMenu);
 	};
 
+	// Determine if user is admin
+	const isAdmin = auth.user?.role === "admin";
+
 	return (
 		<div className="dashboard">
 			<div className="dashboard-header">
@@ -127,7 +131,9 @@ const Dashboard = () => {
 					<div className="user-menu-container">
 						<div className="user-info" onClick={toggleUserMenu}>
 							<span className="username">{auth.user?.username || "User"}</span>
-							<span className="role-badge">{auth.user?.role || "user"}</span>
+							<span className={`role-badge ${isAdmin ? "admin" : ""}`}>
+								{auth.user?.role || "user"}
+							</span>
 							<span className="credits">
 								Credits: {auth.user?.credits || 0}
 							</span>
@@ -138,7 +144,7 @@ const Dashboard = () => {
 								<div className="dropdown-item">
 									<span>Profile</span>
 								</div>
-								{auth.user?.role === "admin" && (
+								{isAdmin && (
 									<div className="dropdown-item">
 										<span>Admin Panel</span>
 									</div>
@@ -153,49 +159,59 @@ const Dashboard = () => {
 			</div>
 
 			<div className="dashboard-content">
-				<div className="dashboard-sidebar">
-					<GuestManager
-						guests={guests}
-						selectedGuest={selectedGuest}
-						onSelectGuest={handleGuestSelect}
-					/>
-				</div>
-
-				<div className="dashboard-main">
-					<CommandPanel
-						selectedGuest={selectedGuest}
-						onSendCommand={handleSendCommand}
-					/>
-
-					<div className="command-results">
-						<h3>Command Results</h3>
-						<div className="results-list">
-							{commandResults.length === 0 ? (
-								<p>No command results yet</p>
-							) : (
-								commandResults.map((result, index) => (
-									<div
-										key={index}
-										className={`result-item ${
-											result.success ? "success" : "error"
-										}`}
-									>
-										<div className="result-header">
-											<span className="guest-id">{result.guestId}</span>
-											<span className="action">{result.action}</span>
-											<span className="status">
-												{result.success ? "Success" : "Failed"}
-											</span>
-										</div>
-										{result.error && (
-											<div className="error-message">{result.error}</div>
-										)}
-									</div>
-								))
-							)}
+				{isAdmin ? (
+					// Admin view - show guest management and command panel
+					<>
+						<div className="dashboard-sidebar">
+							<GuestManager
+								guests={guests}
+								selectedGuest={selectedGuest}
+								onSelectGuest={handleGuestSelect}
+							/>
 						</div>
+
+						<div className="dashboard-main">
+							<CommandPanel
+								selectedGuest={selectedGuest}
+								onSendCommand={handleSendCommand}
+							/>
+
+							<div className="command-results">
+								<h3>Command Results</h3>
+								<div className="results-list">
+									{commandResults.length === 0 ? (
+										<p>No command results yet</p>
+									) : (
+										commandResults.map((result, index) => (
+											<div
+												key={index}
+												className={`result-item ${
+													result.success ? "success" : "error"
+												}`}
+											>
+												<div className="result-header">
+													<span className="guest-id">{result.guestId}</span>
+													<span className="action">{result.action}</span>
+													<span className="status">
+														{result.success ? "Success" : "Failed"}
+													</span>
+												</div>
+												{result.error && (
+													<div className="error-message">{result.error}</div>
+												)}
+											</div>
+										))
+									)}
+								</div>
+							</div>
+						</div>
+					</>
+				) : (
+					// Regular user view - show computer rental interface
+					<div className="dashboard-main">
+						<ComputerRental />
 					</div>
-				</div>
+				)}
 			</div>
 		</div>
 	);

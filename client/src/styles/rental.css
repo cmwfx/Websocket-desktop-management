@@ -1,0 +1,258 @@
+.computer-rental {
+	padding: 1rem;
+}
+
+.rental-section {
+	margin-bottom: 2rem;
+}
+
+.rental-section h2 {
+	margin-bottom: 1rem;
+	color: #2c3e50;
+	border-bottom: 2px solid #eee;
+	padding-bottom: 0.5rem;
+}
+
+.no-rentals,
+.no-computers {
+	color: #777;
+	font-style: italic;
+	padding: 1rem;
+	background-color: #f9f9f9;
+	border-radius: 4px;
+	text-align: center;
+}
+
+/* Rental cards */
+.rental-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	gap: 1rem;
+}
+
+.rental-card {
+	background-color: white;
+	border-radius: 8px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	padding: 1rem;
+	transition: transform 0.2s;
+}
+
+.rental-card:hover {
+	transform: translateY(-3px);
+}
+
+.rental-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1rem;
+}
+
+.rental-header h3 {
+	margin: 0;
+	color: #2c3e50;
+}
+
+.time-remaining {
+	background-color: #3498db;
+	color: white;
+	padding: 0.3rem 0.6rem;
+	border-radius: 4px;
+	font-size: 0.8rem;
+	font-weight: 600;
+}
+
+.rental-details {
+	margin-bottom: 1rem;
+}
+
+.rental-details p {
+	margin: 0.5rem 0;
+	color: #555;
+}
+
+/* Computer cards */
+.computer-list {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	gap: 1rem;
+}
+
+.computer-card {
+	background-color: white;
+	border-radius: 8px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	padding: 1rem;
+	transition: transform 0.2s;
+}
+
+.computer-card:hover {
+	transform: translateY(-3px);
+}
+
+.computer-card h3 {
+	margin: 0 0 1rem 0;
+	color: #2c3e50;
+}
+
+.computer-details {
+	margin-bottom: 1rem;
+}
+
+.computer-details p {
+	margin: 0.5rem 0;
+	color: #555;
+}
+
+.computer-details ul {
+	margin: 0.5rem 0;
+	padding-left: 1.5rem;
+	color: #555;
+}
+
+/* Buttons */
+.rent-button,
+.cancel-button,
+.confirm-button {
+	width: 100%;
+	padding: 0.75rem;
+	border: none;
+	border-radius: 4px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color 0.2s;
+}
+
+.rent-button {
+	background-color: #2ecc71;
+	color: white;
+}
+
+.rent-button:hover {
+	background-color: #27ae60;
+}
+
+.rent-button:disabled {
+	background-color: #ccc;
+	cursor: not-allowed;
+}
+
+.cancel-button {
+	background-color: #e74c3c;
+	color: white;
+}
+
+.cancel-button:hover {
+	background-color: #c0392b;
+}
+
+.confirm-button {
+	background-color: #3498db;
+	color: white;
+}
+
+.confirm-button:hover {
+	background-color: #2980b9;
+}
+
+.confirm-button:disabled {
+	background-color: #ccc;
+	cursor: not-allowed;
+}
+
+.insufficient-credits {
+	color: #e74c3c;
+	font-size: 0.8rem;
+	margin-top: 0.5rem;
+	text-align: center;
+}
+
+/* Modal */
+.modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: 1000;
+}
+
+.rental-modal {
+	background-color: white;
+	border-radius: 8px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+	width: 90%;
+	max-width: 500px;
+	padding: 1.5rem;
+}
+
+.rental-modal h2 {
+	margin-top: 0;
+	color: #2c3e50;
+}
+
+.rental-modal h3 {
+	color: #3498db;
+	margin-bottom: 1.5rem;
+}
+
+.modal-content {
+	margin-bottom: 1.5rem;
+}
+
+.duration-selector {
+	margin: 1.5rem 0;
+}
+
+.duration-selector label {
+	display: block;
+	margin-bottom: 0.5rem;
+	color: #555;
+}
+
+.duration-selector input {
+	width: 100%;
+	padding: 0.75rem;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	font-size: 1rem;
+}
+
+.total-cost {
+	font-size: 1.2rem;
+	color: #2c3e50;
+	text-align: right;
+}
+
+.modal-actions {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.modal-actions button {
+	flex: 1;
+}
+
+/* Loading and error states */
+.loading,
+.error-message {
+	padding: 2rem;
+	text-align: center;
+	background-color: #f9f9f9;
+	border-radius: 8px;
+	margin: 1rem 0;
+}
+
+.loading {
+	color: #3498db;
+}
+
+.error-message {
+	color: #e74c3c;
+}
