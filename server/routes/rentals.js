@@ -193,23 +193,50 @@ router.post("/", authMiddleware, async (req, res) => {
 // Cancel a rental
 router.post("/:id/cancel", authMiddleware, async (req, res) => {
 	try {
-		const rental = await Rental.findById(req.params.id);
+		console.log(
+			`Attempting to cancel rental ${req.params.id} by user ${req.user.id}`
+		);
+
+		const rental = await Rental.findById(req.params.id)
+			.populate("userId", "username role")
+			.populate("computerId", "computerName guestId");
+
 		if (!rental) {
+			console.log(`Rental ${req.params.id} not found`);
 			return res.status(404).json({ message: "Rental not found" });
 		}
 
+		console.log("Rental found:", {
+			rentalId: rental._id,
+			userId: rental.userId._id,
+			requestUserId: req.user.id,
+			requestUserRole: req.user.role,
+			status: rental.status,
+		});
+
 		// Check if user is admin or the rental owner
-		if (req.user.role !== "admin" && rental.userId.toString() !== req.user.id) {
-			return res
-				.status(403)
-				.json({ message: "Not authorized to cancel this rental" });
+		const isAdmin = req.user.role === "admin";
+		const isOwner = rental.userId._id.toString() === req.user.id;
+
+		if (!isAdmin && !isOwner) {
+			console.log(
+				`Unauthorized cancellation attempt. User role: ${req.user.role}, User ID: ${req.user.id}, Rental owner: ${rental.userId._id}`
+			);
+			return res.status(403).json({
+				message: "Not authorized to cancel this rental",
+				error: "ERR_UNAUTHORIZED",
+			});
 		}
 
 		// Check if rental is active
 		if (rental.status !== "active") {
-			return res
-				.status(400)
-				.json({ message: "Only active rentals can be cancelled" });
+			console.log(
+				`Cannot cancel rental ${req.params.id} - status is ${rental.status}`
+			);
+			return res.status(400).json({
+				message: "Only active rentals can be cancelled",
+				error: "ERR_INVALID_STATUS",
+			});
 		}
 
 		// Get the computer first to calculate refund
