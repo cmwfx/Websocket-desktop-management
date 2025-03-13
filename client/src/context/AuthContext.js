@@ -23,6 +23,7 @@ export const AuthProvider = ({ children }) => {
 					] = `Bearer ${auth.token}`;
 
 					const res = await axios.get("/api/auth/profile");
+					console.log("Profile response:", res.data);
 
 					setAuth({
 						token: auth.token,
@@ -30,7 +31,14 @@ export const AuthProvider = ({ children }) => {
 						user: res.data,
 						loading: false,
 					});
+					console.log("Updated auth state:", {
+						token: auth.token,
+						isAuthenticated: true,
+						user: res.data,
+						loading: false,
+					});
 				} catch (err) {
+					console.error("Load user error:", err);
 					// If token is invalid or expired, clear everything
 					localStorage.removeItem("token");
 					delete axios.defaults.headers.common["Authorization"];
@@ -53,10 +61,17 @@ export const AuthProvider = ({ children }) => {
 	const login = async (username, password) => {
 		try {
 			const res = await axios.post("/api/auth/login", { username, password });
+			console.log("Login response:", res.data);
 
 			localStorage.setItem("token", res.data.token);
 
 			setAuth({
+				token: res.data.token,
+				isAuthenticated: true,
+				user: res.data.user,
+				loading: false,
+			});
+			console.log("Auth state after login:", {
 				token: res.data.token,
 				isAuthenticated: true,
 				user: res.data.user,

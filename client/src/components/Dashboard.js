@@ -138,9 +138,15 @@ const Dashboard = () => {
 
 	// Determine if user is admin
 	const isAdmin = auth?.user?.role === "admin";
+	console.log("Auth state in Dashboard:", auth); // Debug log
+	console.log("Is admin?", isAdmin, "Role:", auth?.user?.role); // Debug log
 
 	// If auth is still loading or user is not available, show loading state
 	if (auth?.loading || !auth?.user) {
+		console.log("Dashboard loading state:", {
+			loading: auth?.loading,
+			user: auth?.user,
+		}); // Debug log
 		return <div className="loading">Loading dashboard...</div>;
 	}
 
