@@ -31,6 +31,14 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// API Routes first
+app.use("/api/guests", guestRoutes);
+app.use("/api/commands", commandRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/computers", computerRoutes);
+app.use("/api/rentals", rentalRoutes);
+app.use("/api/users", userRoutes);
+
 // Serve static files from the React app in production
 if (process.env.NODE_ENV === "production") {
 	app.use(express.static(path.join(__dirname, "../client/build")));
@@ -40,14 +48,6 @@ if (process.env.NODE_ENV === "production") {
 		res.sendFile(path.join(__dirname, "../client/build", "index.html"));
 	});
 }
-
-// Routes
-app.use("/api/guests", guestRoutes);
-app.use("/api/commands", commandRoutes);
-app.use("/api/auth", authRoutes);
-app.use("/api/computers", computerRoutes);
-app.use("/api/rentals", rentalRoutes);
-app.use("/api/users", userRoutes);
 
 // Create HTTP server
 const server = http.createServer(app);
