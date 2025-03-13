@@ -193,35 +193,40 @@ router.post("/", authMiddleware, async (req, res) => {
 // Cancel a rental
 router.post("/:id/cancel", authMiddleware, async (req, res) => {
 	try {
-		console.log(
-			`Attempting to cancel rental ${req.params.id} by user ${req.user.id}`
-		);
+		console.log("Cancel rental request received:", {
+			rentalId: req.params.id,
+			userId: req.user.id,
+			userRole: req.user.role,
+			headers: req.headers,
+		});
 
-		const rental = await Rental.findById(req.params.id)
-			.populate("userId", "username role")
-			.populate("computerId", "computerName guestId");
+		const rental = await Rental.findById(req.params.id);
 
 		if (!rental) {
 			console.log(`Rental ${req.params.id} not found`);
 			return res.status(404).json({ message: "Rental not found" });
 		}
 
-		console.log("Rental found:", {
+		console.log("Found rental:", {
 			rentalId: rental._id,
-			userId: rental.userId._id,
-			requestUserId: req.user.id,
-			requestUserRole: req.user.role,
+			userId: rental.userId,
 			status: rental.status,
 		});
 
 		// Check if user is admin or the rental owner
 		const isAdmin = req.user.role === "admin";
-		const isOwner = rental.userId._id.toString() === req.user.id;
+		const isOwner = rental.userId.toString() === req.user.id;
+
+		console.log("Authorization check:", {
+			isAdmin,
+			isOwner,
+			userRole: req.user.role,
+			userId: req.user.id,
+			rentalUserId: rental.userId.toString(),
+		});
 
 		if (!isAdmin && !isOwner) {
-			console.log(
-				`Unauthorized cancellation attempt. User role: ${req.user.role}, User ID: ${req.user.id}, Rental owner: ${rental.userId._id}`
-			);
+			console.log("Authorization failed for rental cancellation");
 			return res.status(403).json({
 				message: "Not authorized to cancel this rental",
 				error: "ERR_UNAUTHORIZED",
@@ -230,42 +235,63 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 
 		// Check if rental is active
 		if (rental.status !== "active") {
-			console.log(
-				`Cannot cancel rental ${req.params.id} - status is ${rental.status}`
-			);
+			console.log(`Cannot cancel rental - current status: ${rental.status}`);
 			return res.status(400).json({
 				message: "Only active rentals can be cancelled",
 				error: "ERR_INVALID_STATUS",
 			});
 		}
 
-		// Get the computer first to calculate refund
+		// Get the computer
 		const computer = await Computer.findById(rental.computerId);
 		if (!computer) {
+			console.log("Associated computer not found:", rental.computerId);
 			return res.status(404).json({ message: "Associated computer not found" });
 		}
 
+		console.log("Found associated computer:", {
+			computerId: computer._id,
+			computerName: computer.computerName,
+			status: computer.status,
+		});
+
 		// Calculate refund amount
-		const timeUsed = (Date.now() - rental.startTime) / (60 * 60 * 1000); // in hours
+		const timeUsed = (Date.now() - rental.startTime) / (60 * 60 * 1000);
 		const timeRemaining = Math.max(0, rental.duration - timeUsed);
 		const refundAmount = Math.floor(
 			(timeRemaining / rental.duration) * rental.cost
 		);
 
+		console.log("Calculated refund:", {
+			timeUsed,
+			timeRemaining,
+			refundAmount,
+		});
+
 		// Update rental status
 		rental.status = "cancelled";
 		await rental.save();
+		console.log("Updated rental status to cancelled");
 
 		// Update computer status
 		computer.status = "available";
 		computer.isRented = false;
 		computer.currentUser = null;
 		await computer.save();
+		console.log("Updated computer status to available");
 
-		// Generate a new password for security
+		// Process refund if applicable
+		if (refundAmount > 0) {
+			const user = await User.findById(rental.userId);
+			if (user) {
+				user.credits += refundAmount;
+				await user.save();
+				console.log(`Refunded ${refundAmount} credits to user ${user._id}`);
+			}
+		}
+
+		// Handle password change and notifications
 		const newPassword = Math.random().toString(36).slice(-8);
-
-		// Create password history entry
 		const passwordHistory = new PasswordChangeHistory({
 			computerId: computer._id,
 			guestId: computer.guestId,
@@ -276,27 +302,17 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 		});
 		await passwordHistory.save();
 
-		// Refund credits to user if applicable
-		if (refundAmount > 0) {
-			const user = await User.findById(rental.userId);
-			if (user) {
-				user.credits += refundAmount;
-				await user.save();
-			}
-		}
-
-		// Send commands to the computer if it's online
+		// Send commands to computer if online
 		const guests = req.app.get("guests") || {};
 		const guest = guests[computer.guestId];
 		if (guest && guest.id) {
-			// Change password command
+			console.log("Sending commands to connected computer");
 			req.app.get("io").to(guest.id).emit("executeCommand", {
 				action: "changePassword",
 				username: rental.username,
 				newPassword: newPassword,
 			});
 
-			// Lock computer command after password change
 			setTimeout(() => {
 				req.app.get("io").to(guest.id).emit("executeCommand", {
 					action: "lockComputer",
@@ -304,18 +320,19 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 			}, 5000);
 		}
 
-		// Notify clients about the rental cancellation
+		// Send notifications
 		req.app.get("io").to(`rental:${rental._id}`).emit("rentalCancelled", {
 			rentalId: rental._id,
 			refundAmount,
 		});
 
-		// Notify about computer status update
 		req.app.get("io").emit("computerUpdate", {
 			computerId: computer._id,
 			status: "available",
 			isRented: false,
 		});
+
+		console.log("Rental cancellation completed successfully");
 
 		res.json({
 			message: "Rental cancelled successfully",
@@ -324,7 +341,11 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error cancelling rental:", error);
-		res.status(500).json({ message: "Server error" });
+		console.error(error.stack);
+		res.status(500).json({
+			message: "Server error while cancelling rental",
+			error: error.message,
+		});
 	}
 });
 
