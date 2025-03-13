@@ -25,6 +25,14 @@ const PasswordChangeHistory = require("./models/PasswordChangeHistory");
 // Load environment variables
 dotenv.config();
 
+// Verify critical environment variables
+console.log("Checking environment variables...");
+if (!process.env.JWT_SECRET) {
+	console.error("WARNING: JWT_SECRET is not set!");
+	process.env.JWT_SECRET = "development_jwt_secret"; // Fallback for development
+}
+console.log("JWT_SECRET status:", process.env.JWT_SECRET ? "set" : "not set");
+
 const app = express();
 
 // Middleware

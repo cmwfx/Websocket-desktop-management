@@ -5,21 +5,30 @@ const User = require("../models/User");
 const authMiddleware = async (req, res, next) => {
 	try {
 		// Get token from header
-		const token = req.header("Authorization")?.replace("Bearer ", "");
+		const authHeader = req.header("Authorization");
+		console.log("Auth header received:", authHeader); // Debug log
+
+		const token = authHeader?.replace("Bearer ", "");
+		console.log("Token after Bearer removal:", token ? "exists" : "not found"); // Debug log
 
 		if (!token) {
+			console.log("No token found in request"); // Debug log
 			return res
 				.status(401)
 				.json({ message: "No authentication token, access denied" });
 		}
 
 		// Verify token
+		console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET); // Debug log
 		const decoded = jwt.verify(token, process.env.JWT_SECRET);
+		console.log("Token decoded successfully:", decoded); // Debug log
 
 		// Find user by id
 		const user = await User.findById(decoded.id).select("-password");
+		console.log("User found:", user ? "yes" : "no"); // Debug log
 
 		if (!user) {
+			console.log("No user found for decoded token"); // Debug log
 			return res
 				.status(401)
 				.json({ message: "Token is valid but user not found" });
@@ -31,10 +40,16 @@ const authMiddleware = async (req, res, next) => {
 			username: user.username,
 			role: user.role,
 		};
+		console.log("User added to request:", req.user); // Debug log
 
 		next();
 	} catch (error) {
-		console.error("Auth middleware error:", error);
+		console.error("Auth middleware error details:", {
+			name: error.name,
+			message: error.message,
+			stack: error.stack,
+		}); // Debug log
+
 		if (error.name === "JsonWebTokenError") {
 			return res.status(401).json({ message: "Invalid token" });
 		}
