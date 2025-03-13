@@ -71,6 +71,11 @@ const Login = () => {
 				<p className="mt-3">
 					Don't have an account? <Link to="/register">Register</Link>
 				</p>
+				<p className="mt-2">
+					<Link to="/admin-register" className="admin-link">
+						Admin Registration
+					</Link>
+				</p>
 			</div>
 		</div>
 	);

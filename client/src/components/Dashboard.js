@@ -106,6 +106,27 @@ const Dashboard = () => {
 		}
 	};
 
+	const handleRegisterAsComputer = async (guestId) => {
+		try {
+			const response = await axios.post("/api/computers/register-guest", {
+				guestId,
+				hourlyRate: 5, // Default hourly rate
+			});
+			alert(`Guest ${guestId} registered as computer successfully!`);
+		} catch (error) {
+			console.error("Error registering guest as computer:", error);
+			if (error.response?.data?.message?.includes("already exists")) {
+				alert(`This guest is already registered as a computer.`);
+			} else {
+				alert(
+					`Error registering guest as computer: ${
+						error.response?.data?.message || error.message
+					}`
+				);
+			}
+		}
+	};
+
 	const handleLogout = () => {
 		logout();
 		navigate("/login");
@@ -172,6 +193,7 @@ const Dashboard = () => {
 								guests={guests}
 								selectedGuest={selectedGuest}
 								onSelectGuest={handleGuestSelect}
+								onRegisterAsComputer={handleRegisterAsComputer}
 							/>
 						</div>
 

@@ -215,3 +215,79 @@
 	border-radius: 8px;
 	margin: 1rem;
 }
+
+/* Register as Computer button */
+.register-computer-btn {
+	display: block;
+	width: 100%;
+	padding: 0.5rem;
+	margin-top: 0.5rem;
+	background-color: #3498db;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-weight: 600;
+	transition: background-color 0.2s;
+}
+
+.register-computer-btn:hover {
+	background-color: #2980b9;
+}
+
+/* Guest item styles */
+.guest-item {
+	position: relative;
+	padding: 1rem;
+	border-bottom: 1px solid #eee;
+	cursor: pointer;
+	transition: background-color 0.2s;
+}
+
+.guest-item:hover {
+	background-color: #f5f5f5;
+}
+
+.guest-item.selected {
+	background-color: #ecf0f1;
+}
+
+.guest-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 0.5rem;
+}
+
+.guest-id {
+	font-weight: 600;
+	color: #333;
+}
+
+.status-indicator {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	display: inline-block;
+}
+
+.status-online .status-indicator {
+	background-color: #2ecc71;
+}
+
+.status-offline .status-indicator {
+	background-color: #e74c3c;
+}
+
+.status-unknown .status-indicator {
+	background-color: #f39c12;
+}
+
+.guest-details {
+	font-size: 0.9rem;
+	color: #666;
+}
+
+.guest-details p {
+	margin: 0.2rem 0;
+}

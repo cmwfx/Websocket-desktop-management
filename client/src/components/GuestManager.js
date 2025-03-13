@@ -1,6 +1,11 @@
 import React from "react";
 
-const GuestManager = ({ guests, selectedGuest, onSelectGuest }) => {
+const GuestManager = ({
+	guests,
+	selectedGuest,
+	onSelectGuest,
+	onRegisterAsComputer,
+}) => {
 	// Function to get status class
 	const getStatusClass = (guest) => {
 		if (!guest) return "status-unknown";
@@ -27,9 +32,11 @@ const GuestManager = ({ guests, selectedGuest, onSelectGuest }) => {
 							className={`guest-item ${getStatusClass(guest)} ${
 								selectedGuest === guest.guestId ? "selected" : ""
 							}`}
-							onClick={() => onSelectGuest(guest.guestId)}
 						>
-							<div className="guest-info">
+							<div
+								className="guest-info"
+								onClick={() => onSelectGuest(guest.guestId)}
+							>
 								<div className="guest-header">
 									<span className="guest-id">{guest.guestId}</span>
 									<span
@@ -43,6 +50,14 @@ const GuestManager = ({ guests, selectedGuest, onSelectGuest }) => {
 									<p>Last Seen: {formatLastSeen(guest.lastSeen)}</p>
 								</div>
 							</div>
+							{onRegisterAsComputer && (
+								<button
+									className="register-computer-btn"
+									onClick={() => onRegisterAsComputer(guest.guestId)}
+								>
+									Register as Computer
+								</button>
+							)}
 						</div>
 					))}
 				</div>

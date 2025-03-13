@@ -10,6 +10,7 @@ import "./styles/auth.css";
 import Dashboard from "./components/Dashboard";
 import Login from "./components/Login";
 import Register from "./components/Register";
+import AdminRegister from "./components/AdminRegister";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
 
@@ -22,6 +23,7 @@ function App() {
 						{/* Public routes */}
 						<Route path="/login" element={<Login />} />
 						<Route path="/register" element={<Register />} />
+						<Route path="/admin-register" element={<AdminRegister />} />
 
 						{/* Protected routes */}
 						<Route
