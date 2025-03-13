@@ -38,6 +38,11 @@ const RentalSchema = new mongoose.Schema(
 			enum: ["active", "expired", "cancelled"],
 			default: "active",
 		},
+		username: {
+			type: String,
+			required: true,
+			default: "Administrator",
+		},
 		password: {
 			type: String,
 			required: true,

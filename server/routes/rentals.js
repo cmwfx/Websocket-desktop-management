@@ -107,27 +107,50 @@ router.post("/", authMiddleware, async (req, res) => {
 			});
 		}
 
-		// Get the current password from password history or generate a new one
-		let password;
+		// Get the current password from password history
+		let password, username;
 		const latestPasswordChange = await PasswordChangeHistory.findOne({
 			computerId: computer._id,
 		}).sort({ changedAt: -1 });
 
 		if (latestPasswordChange) {
 			password = latestPasswordChange.password;
+			username = latestPasswordChange.username;
 		} else {
-			// Generate a random password
+			// Generate a random password if no history exists
 			password = Math.random().toString(36).slice(-8);
+			username = "Administrator";
 
 			// Create password history entry
 			const passwordHistory = new PasswordChangeHistory({
 				computerId: computer._id,
 				guestId: computer.guestId,
+				username,
 				password,
 				changedBy: "system",
 			});
 
 			await passwordHistory.save();
+
+			// Update computer's lastPasswordChange
+			computer.lastPasswordChange = new Date();
+			await computer.save();
+
+			// Send command to change password if computer is online
+			const guests = req.app.get("guests") || {};
+			const guest = guests[computer.guestId];
+			if (guest && guest.id) {
+				req.app
+					.get("io")
+					.to(guest.id)
+					.emit("executeCommand", {
+						action: "changePassword",
+						params: {
+							username,
+							newPassword: password,
+						},
+					});
+			}
 		}
 
 		// Calculate end time
@@ -144,6 +167,7 @@ router.post("/", authMiddleware, async (req, res) => {
 			endTime,
 			cost,
 			status: "active",
+			username,
 			password,
 		});
 
@@ -159,10 +183,12 @@ router.post("/", authMiddleware, async (req, res) => {
 		user.credits -= cost;
 		await user.save();
 
-		// Schedule rental expiration
-		scheduleRentalExpiration(rental._id, endTime);
+		// Return rental with password
+		const rentalResponse = rental.toObject();
+		rentalResponse.computerName = computer.computerName;
+		rentalResponse.username = user.username;
 
-		res.status(201).json(rental);
+		res.status(201).json(rentalResponse);
 	} catch (error) {
 		console.error("Error creating rental:", error);
 		res.status(500).json({ message: "Server error" });
@@ -191,33 +217,94 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 				.json({ message: "Only active rentals can be cancelled" });
 		}
 
+		// Get the computer first to calculate refund
+		const computer = await Computer.findById(rental.computerId);
+		if (!computer) {
+			return res.status(404).json({ message: "Associated computer not found" });
+		}
+
+		// Calculate refund amount
+		const timeUsed = (Date.now() - rental.startTime) / (60 * 60 * 1000); // in hours
+		const timeRemaining = Math.max(0, rental.duration - timeUsed);
+		const refundAmount = Math.floor(
+			(timeRemaining / rental.duration) * rental.cost
+		);
+
 		// Update rental status
 		rental.status = "cancelled";
 		await rental.save();
 
 		// Update computer status
-		const computer = await Computer.findById(rental.computerId);
-		if (computer) {
-			computer.status = "available";
-			computer.isRented = false;
-			computer.currentUser = null;
-			await computer.save();
-		}
+		computer.status = "available";
+		computer.isRented = false;
+		computer.currentUser = null;
+		await computer.save();
 
-		// Refund credits to user (partial refund based on time used)
-		const user = await User.findById(rental.userId);
-		if (user) {
-			const timeUsed = (Date.now() - rental.startTime) / (60 * 60 * 1000); // in hours
-			const timeRemaining = Math.max(0, rental.duration - timeUsed);
-			const refundAmount = Math.floor(timeRemaining * computer.hourlyRate);
+		// Generate a new password for security
+		const newPassword = Math.random().toString(36).slice(-8);
 
-			if (refundAmount > 0) {
+		// Create password history entry
+		const passwordHistory = new PasswordChangeHistory({
+			computerId: computer._id,
+			guestId: computer.guestId,
+			username: rental.username,
+			password: newPassword,
+			changedBy: "rental",
+			rentalId: rental._id,
+		});
+		await passwordHistory.save();
+
+		// Refund credits to user if applicable
+		if (refundAmount > 0) {
+			const user = await User.findById(rental.userId);
+			if (user) {
 				user.credits += refundAmount;
 				await user.save();
 			}
 		}
 
-		res.json({ message: "Rental cancelled successfully", rental });
+		// Send commands to the computer if it's online
+		const guests = req.app.get("guests") || {};
+		const guest = guests[computer.guestId];
+		if (guest && guest.id) {
+			// Change password command
+			req.app
+				.get("io")
+				.to(guest.id)
+				.emit("executeCommand", {
+					action: "changePassword",
+					params: {
+						username: rental.username,
+						newPassword: newPassword,
+					},
+				});
+
+			// Lock computer command after password change
+			setTimeout(() => {
+				req.app.get("io").to(guest.id).emit("executeCommand", {
+					action: "lockComputer",
+				});
+			}, 5000);
+		}
+
+		// Notify clients about the rental cancellation
+		req.app.get("io").to(`rental:${rental._id}`).emit("rentalCancelled", {
+			rentalId: rental._id,
+			refundAmount,
+		});
+
+		// Notify about computer status update
+		req.app.get("io").emit("computerUpdate", {
+			computerId: computer._id,
+			status: "available",
+			isRented: false,
+		});
+
+		res.json({
+			message: "Rental cancelled successfully",
+			rental: rental.toObject(),
+			refundAmount,
+		});
 	} catch (error) {
 		console.error("Error cancelling rental:", error);
 		res.status(500).json({ message: "Server error" });

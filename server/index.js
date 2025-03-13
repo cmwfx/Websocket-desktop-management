@@ -68,6 +68,9 @@ const io = socketIo(server, {
 	},
 });
 
+// Make io instance available to routes
+app.set("io", io);
+
 // Start the server after MongoDB connection attempt
 function startServer() {
 	const PORT = process.env.PORT || 5000;
@@ -351,14 +354,20 @@ io.on("connection", (socket) => {
 				// Find the computer for this guest
 				const computer = await Computer.findOne({ guestId: result.guestId });
 				if (computer) {
-					// Create a new password history entry
+					// Create a new password history entry with both username and password
 					const passwordHistory = new PasswordChangeHistory({
 						computerId: computer._id,
 						guestId: result.guestId,
+						username: result.params.username || "Administrator", // Default to Administrator if not provided
 						password: result.params.newPassword,
-						changedBy: "system",
+						changedBy: "admin",
 					});
 					await passwordHistory.save();
+
+					// Update computer's lastPasswordChange
+					computer.lastPasswordChange = new Date();
+					await computer.save();
+
 					console.log(`Password history updated for computer ${computer._id}`);
 				}
 			}

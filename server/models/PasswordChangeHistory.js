@@ -11,6 +11,11 @@ const PasswordChangeHistorySchema = new mongoose.Schema(
 			type: String,
 			required: true,
 		},
+		username: {
+			type: String,
+			required: true,
+			default: "Administrator",
+		},
 		password: {
 			type: String,
 			required: true,

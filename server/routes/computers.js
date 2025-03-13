@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Computer = require("../models/Computer");
 const Guest = require("../models/Guest");
+const PasswordChangeHistory = require("../models/PasswordChangeHistory");
 const { authMiddleware, adminMiddleware } = require("../middleware/auth");
 
 // Get all computers (public)
@@ -187,6 +188,76 @@ router.post("/register-guest", adminMiddleware, async (req, res) => {
 		res.status(201).json(computer);
 	} catch (error) {
 		console.error("Error registering guest as computer:", error);
+		res.status(500).json({ message: "Server error" });
+	}
+});
+
+// Change computer password (admin only)
+router.post("/:id/change-password", adminMiddleware, async (req, res) => {
+	try {
+		const { id } = req.params;
+		const { newPassword } = req.body;
+
+		// Validate password
+		if (!newPassword || newPassword.length < 6) {
+			return res
+				.status(400)
+				.json({ message: "Password must be at least 6 characters long" });
+		}
+
+		// Find computer
+		const computer = await Computer.findById(id);
+		if (!computer) {
+			return res.status(404).json({ message: "Computer not found" });
+		}
+
+		// Create password history entry
+		const passwordHistory = new PasswordChangeHistory({
+			computerId: computer._id,
+			guestId: computer.guestId,
+			password: newPassword,
+			changedBy: "admin",
+		});
+
+		await passwordHistory.save();
+
+		// Update computer's lastPasswordChange
+		computer.lastPasswordChange = new Date();
+		await computer.save();
+
+		// Get the socket instance for the guest
+		const guests = req.app.get("guests") || {};
+		const guest = guests[computer.guestId];
+
+		if (guest && guest.id) {
+			// Send command to change password
+			req.app.get("io").to(guest.id).emit("executeCommand", {
+				action: "changePassword",
+				params: { newPassword },
+			});
+
+			res.json({
+				message: "Password change command sent successfully",
+				computer: {
+					_id: computer._id,
+					computerName: computer.computerName,
+					lastPasswordChange: computer.lastPasswordChange,
+				},
+			});
+		} else {
+			// If computer is offline, still save the password but inform admin
+			res.json({
+				message:
+					"Password saved but computer is offline. Changes will apply when computer connects.",
+				computer: {
+					_id: computer._id,
+					computerName: computer.computerName,
+					lastPasswordChange: computer.lastPasswordChange,
+				},
+			});
+		}
+	} catch (error) {
+		console.error("Error changing computer password:", error);
 		res.status(500).json({ message: "Server error" });
 	}
 });
