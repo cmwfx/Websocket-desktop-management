@@ -177,90 +177,98 @@ io.on("connection", (socket) => {
 		} = data;
 
 		console.log(
-			`Guest registration received: ${guestId}`,
+			`Guest registration received for IP: ${ipAddress}`,
 			JSON.stringify(data, null, 2)
 		);
 
-		// Store the socket connection with full guest details
-		guests[guestId] = {
-			id: socket.id,
-			hostname,
-			ipAddress,
-			osInfo,
-			windowsVersion,
-			desktopEnvironment,
-			registeredAt: new Date(),
-			lastSeen: new Date(),
-			status: "online",
-		};
-
-		console.log(`Updated in-memory guests:`, JSON.stringify(guests, null, 2));
-
-		// Update or create guest in database
-		await safeDbOperation(async () => {
-			console.log(`Looking for guest in database: ${guestId}`);
-			let guest = await Guest.findOne({ guestId });
+		try {
+			// Look for existing guest with this IP
+			let guest = await Guest.findOne({ ipAddress });
+			let existingGuestId = null;
 
 			if (guest) {
-				console.log(`Found existing guest in database: ${guestId}`);
-				// Update existing guest with all fields
-				guest.status = "online";
-				guest.lastSeen = new Date();
+				// Update existing guest
+				existingGuestId = guest.guestId;
+				console.log(`Found existing guest with IP ${ipAddress}, updating...`);
+
 				guest.hostname = hostname || guest.hostname;
-				guest.ipAddress = ipAddress || guest.ipAddress;
 				guest.osInfo = osInfo || guest.osInfo;
 				guest.windowsVersion = windowsVersion || guest.windowsVersion;
 				guest.desktopEnvironment =
 					desktopEnvironment || guest.desktopEnvironment;
+				guest.status = "online";
+				guest.lastSeen = new Date();
 
-				const savedGuest = await guest.save();
-				console.log(
-					`Updated existing guest in database: ${guestId}`,
-					JSON.stringify(savedGuest.toObject(), null, 2)
-				);
+				await guest.save();
+				console.log(`Updated existing guest: ${guest.guestId}`);
 			} else {
-				console.log(`Creating new guest in database: ${guestId}`);
-				// Create new guest with all fields
+				// Create new guest
+				console.log(
+					`No existing guest found for IP ${ipAddress}, creating new...`
+				);
 				guest = new Guest({
 					guestId,
-					hostname: hostname || "Unknown",
-					ipAddress: ipAddress || "Unknown",
-					osInfo: osInfo || "Unknown",
-					windowsVersion: windowsVersion || "Unknown",
-					desktopEnvironment: desktopEnvironment || "Unknown",
+					hostname,
+					ipAddress,
+					osInfo,
+					windowsVersion,
+					desktopEnvironment,
 					status: "online",
 					lastSeen: new Date(),
 				});
 
-				const savedGuest = await guest.save();
-				console.log(
-					`Created new guest in database: ${guestId}`,
-					JSON.stringify(savedGuest.toObject(), null, 2)
-				);
+				await guest.save();
+				console.log(`Created new guest: ${guest.guestId}`);
 			}
 
-			// Verify the guest was saved correctly
-			const verifyGuest = await Guest.findOne({ guestId });
-			console.log(
-				`Verification - Guest in database after registration:`,
-				JSON.stringify(verifyGuest.toObject(), null, 2)
-			);
+			// Store socket connection with guest details
+			guests[guest.guestId] = {
+				id: socket.id,
+				hostname,
+				ipAddress,
+				osInfo,
+				windowsVersion,
+				desktopEnvironment,
+				registeredAt: new Date(),
+				lastSeen: new Date(),
+				status: "online",
+			};
+
+			// If this was an existing guest with a different ID, clean up old reference
+			if (existingGuestId && existingGuestId !== guest.guestId) {
+				delete guests[existingGuestId];
+			}
+
+			console.log(`Updated in-memory guests registry`);
 
 			// Get and emit the full guest list
 			const guestList = await getFullGuestList();
 			io.emit("guestUpdate", guestList);
 
 			// Check if this guest is registered as a computer
-			const computer = await Computer.findOne({ guestId });
+			const computer = await Computer.findOne({ guestId: guest.guestId });
 			if (computer) {
-				console.log(`Guest ${guestId} is registered as a computer`);
-				// Emit computer update
+				console.log(`Guest ${guest.guestId} is registered as a computer`);
 				io.emit("computerUpdate", {
 					computerId: computer._id,
-					status: computer.status,
+					status: "online",
 				});
 			}
-		}, null);
+		} catch (error) {
+			console.error("Error handling guest registration:", error);
+			// Even if DB operations fail, maintain socket connection in memory
+			guests[guestId] = {
+				id: socket.id,
+				hostname,
+				ipAddress,
+				osInfo,
+				windowsVersion,
+				desktopEnvironment,
+				registeredAt: new Date(),
+				lastSeen: new Date(),
+				status: "online",
+			};
+		}
 	});
 
 	// Handle command results from guests

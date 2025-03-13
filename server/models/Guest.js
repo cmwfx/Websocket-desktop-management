@@ -5,39 +5,37 @@ const GuestSchema = new mongoose.Schema(
 		guestId: {
 			type: String,
 			required: true,
-			unique: true,
-			index: true,
 		},
 		hostname: {
 			type: String,
-			required: false,
+			required: true,
 		},
 		ipAddress: {
 			type: String,
-			required: false,
+			required: true,
+			unique: true,
+			index: true,
 		},
 		osInfo: {
 			type: String,
-			required: false,
+			required: true,
 		},
 		desktopEnvironment: {
 			type: String,
-			required: false,
+			default: "Unknown",
 		},
 		windowsVersion: {
 			type: String,
-			required: false,
+			default: "Unknown",
 		},
 		lastSeen: {
 			type: Date,
 			default: Date.now,
-			index: true,
 		},
 		status: {
 			type: String,
-			enum: ["online", "offline"],
-			default: "offline",
-			index: true,
+			enum: ["online", "offline", "unknown"],
+			default: "unknown",
 		},
 	},
 	{

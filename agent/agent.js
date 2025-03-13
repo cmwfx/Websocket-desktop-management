@@ -3,13 +3,65 @@ const os = require("os");
 const { exec } = require("child_process");
 const dotenv = require("dotenv");
 const https = require("https");
+const fs = require("fs");
+const crypto = require("crypto");
+const path = require("path");
 
 // Load environment variables
 dotenv.config();
 
 // Configuration - hardcode the Heroku URL to ensure it works
 const SERVER_URL = "https://desktop-managemt-8dd667cf9f90.herokuapp.com";
-const GUEST_ID = `guest-${Math.floor(Math.random() * 10000)}`; // Generate a random guest ID
+const GUEST_ID_FILE = path.join(__dirname, ".guest-id");
+
+// Function to generate a consistent guest ID based on machine characteristics
+function generateGuestId() {
+	const hostname = os.hostname();
+	const ipAddresses = Object.values(os.networkInterfaces())
+		.flat()
+		.filter((details) => details.family === "IPv4" && !details.internal)
+		.map((details) => details.address);
+	const ipAddress = ipAddresses.length > 0 ? ipAddresses[0] : "unknown";
+	const macAddresses = Object.values(os.networkInterfaces())
+		.flat()
+		.filter((details) => details.family === "IPv4" && !details.internal)
+		.map((details) => details.mac)
+		.filter((mac) => mac !== "00:00:00:00:00:00");
+	const macAddress = macAddresses.length > 0 ? macAddresses[0] : "unknown";
+
+	// Create a unique string combining hardware identifiers
+	const uniqueString = `${hostname}-${macAddress}-${os.cpus()[0].model}`;
+
+	// Generate a hash of the unique string
+	const hash = crypto.createHash("sha256").update(uniqueString).digest("hex");
+
+	// Return a shorter, more manageable ID
+	return `guest-${hash.substring(0, 8)}`;
+}
+
+// Function to load or create guest ID
+function getGuestId() {
+	try {
+		// Try to read existing guest ID
+		if (fs.existsSync(GUEST_ID_FILE)) {
+			return fs.readFileSync(GUEST_ID_FILE, "utf8").trim();
+		}
+	} catch (error) {
+		console.error("Error reading guest ID file:", error.message);
+	}
+
+	// Generate new guest ID if none exists
+	const newGuestId = generateGuestId();
+	try {
+		fs.writeFileSync(GUEST_ID_FILE, newGuestId);
+	} catch (error) {
+		console.error("Error writing guest ID file:", error.message);
+	}
+	return newGuestId;
+}
+
+// Get the guest ID
+const GUEST_ID = getGuestId();
 
 console.log(`Using server URL: ${SERVER_URL}`);
 
