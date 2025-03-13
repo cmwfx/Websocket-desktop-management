@@ -140,16 +140,11 @@ router.post("/", authMiddleware, async (req, res) => {
 			const guests = req.app.get("guests") || {};
 			const guest = guests[computer.guestId];
 			if (guest && guest.id) {
-				req.app
-					.get("io")
-					.to(guest.id)
-					.emit("executeCommand", {
-						action: "changePassword",
-						params: {
-							username,
-							newPassword: password,
-						},
-					});
+				req.app.get("io").to(guest.id).emit("executeCommand", {
+					action: "changePassword",
+					username,
+					newPassword: password,
+				});
 			}
 		}
 
@@ -268,16 +263,11 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 		const guest = guests[computer.guestId];
 		if (guest && guest.id) {
 			// Change password command
-			req.app
-				.get("io")
-				.to(guest.id)
-				.emit("executeCommand", {
-					action: "changePassword",
-					params: {
-						username: rental.username,
-						newPassword: newPassword,
-					},
-				});
+			req.app.get("io").to(guest.id).emit("executeCommand", {
+				action: "changePassword",
+				username: rental.username,
+				newPassword: newPassword,
+			});
 
 			// Lock computer command after password change
 			setTimeout(() => {
@@ -368,7 +358,8 @@ async function expireRental(rentalId) {
 				// Change password command
 				io.to(guest.id).emit("executeCommand", {
 					action: "changePassword",
-					params: { newPassword },
+					username: rental.username,
+					newPassword: newPassword,
 				});
 
 				// Lock computer command
