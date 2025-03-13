@@ -10,10 +10,17 @@ const { ServerApiVersion } = require("mongodb");
 // Import routes
 const guestRoutes = require("./routes/guests");
 const commandRoutes = require("./routes/commands");
+const authRoutes = require("./routes/auth");
+const computerRoutes = require("./routes/computers");
+const rentalRoutes = require("./routes/rentals");
+const userRoutes = require("./routes/users");
 
 // Import models
 const Guest = require("./models/Guest");
 const CommandLog = require("./models/CommandLog");
+const Computer = require("./models/Computer");
+const Rental = require("./models/Rental");
+const PasswordChangeHistory = require("./models/PasswordChangeHistory");
 
 // Load environment variables
 dotenv.config();
@@ -37,6 +44,10 @@ if (process.env.NODE_ENV === "production") {
 // Routes
 app.use("/api/guests", guestRoutes);
 app.use("/api/commands", commandRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/computers", computerRoutes);
+app.use("/api/rentals", rentalRoutes);
+app.use("/api/users", userRoutes);
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -230,6 +241,17 @@ io.on("connection", (socket) => {
 			// Get and emit the full guest list
 			const guestList = await getFullGuestList();
 			io.emit("guestUpdate", guestList);
+
+			// Check if this guest is registered as a computer
+			const computer = await Computer.findOne({ guestId });
+			if (computer) {
+				console.log(`Guest ${guestId} is registered as a computer`);
+				// Emit computer update
+				io.emit("computerUpdate", {
+					computerId: computer._id,
+					status: computer.status,
+				});
+			}
 		}, null);
 	});
 
@@ -275,10 +297,45 @@ io.on("connection", (socket) => {
 				await newLog.save();
 				console.log(`Created new command log for result`);
 			}
+
+			// If this is a password change result, update the password history
+			if (result.action === "changePassword" && result.success) {
+				// Find the computer for this guest
+				const computer = await Computer.findOne({ guestId: result.guestId });
+				if (computer) {
+					// Create a new password history entry
+					const passwordHistory = new PasswordChangeHistory({
+						computerId: computer._id,
+						guestId: result.guestId,
+						password: result.params.newPassword,
+						changedBy: "system",
+					});
+					await passwordHistory.save();
+					console.log(`Password history updated for computer ${computer._id}`);
+				}
+			}
 		}, null);
 
 		// Broadcast the result to admin clients
 		io.emit("commandUpdate", result);
+	});
+
+	// Handle rental updates
+	socket.on("joinRental", async (rentalId) => {
+		// Join a room specific to this rental
+		socket.join(`rental:${rentalId}`);
+		console.log(`Client ${socket.id} joined rental room: rental:${rentalId}`);
+
+		// Send initial rental data
+		await safeDbOperation(async () => {
+			const rental = await Rental.findById(rentalId)
+				.populate("computerId", "computerName")
+				.populate("userId", "username");
+
+			if (rental) {
+				socket.emit("rentalUpdate", rental);
+			}
+		}, null);
 	});
 
 	// Handle disconnection
@@ -444,3 +501,86 @@ app.get("/api/connected-guests", async (req, res) => {
 		res.json({ guests: fallbackGuests });
 	}
 });
+
+// Function to check for expired rentals and update them
+async function checkExpiredRentals() {
+	if (!isMongoConnected) return;
+
+	try {
+		console.log("Checking for expired rentals...");
+		const now = new Date();
+
+		// Find active rentals that have expired
+		const expiredRentals = await Rental.find({
+			status: "active",
+			endTime: { $lte: now },
+		});
+
+		console.log(`Found ${expiredRentals.length} expired rentals`);
+
+		// Process each expired rental
+		for (const rental of expiredRentals) {
+			console.log(`Processing expired rental: ${rental._id}`);
+
+			// Update rental status
+			rental.status = "expired";
+			await rental.save();
+
+			// Update computer status
+			const computer = await Computer.findById(rental.computerId);
+			if (computer) {
+				computer.status = "available";
+				computer.currentUser = null;
+				await computer.save();
+
+				// Generate a new password
+				const newPassword = Math.random().toString(36).slice(-8);
+
+				// Create password history entry
+				const passwordHistory = new PasswordChangeHistory({
+					computerId: computer._id,
+					guestId: computer.guestId,
+					password: newPassword,
+					changedBy: "rental",
+					rentalId: rental._id,
+				});
+
+				await passwordHistory.save();
+
+				// Send command to change password and lock computer
+				const guest = guests[computer.guestId];
+				if (guest && guest.id) {
+					// Change password command
+					io.to(guest.id).emit("executeCommand", {
+						action: "changePassword",
+						params: { newPassword },
+					});
+
+					// Lock computer command
+					setTimeout(() => {
+						io.to(guest.id).emit("executeCommand", {
+							action: "lockComputer",
+						});
+					}, 5000); // Wait 5 seconds before locking
+				}
+
+				// Notify clients about the rental expiration
+				io.to(`rental:${rental._id}`).emit("rentalExpired", {
+					rentalId: rental._id,
+				});
+				io.emit("computerUpdate", {
+					computerId: computer._id,
+					status: "available",
+				});
+			}
+		}
+	} catch (error) {
+		console.error("Error checking expired rentals:", error);
+	}
+}
+
+// Set up a periodic check for expired rentals
+setInterval(checkExpiredRentals, 60000); // Check every minute
+
+// Run an initial check when the server starts
+setTimeout(checkExpiredRentals, 10000); // Wait 10 seconds after server start

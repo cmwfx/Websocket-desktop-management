@@ -261,8 +261,8 @@ button.danger:hover {
 }
 
 .guest-list {
-	display: flex;
-	flex-direction: column;
+  display: flex;
+  flex-direction: column;
 	gap: 1rem;
 }
 
@@ -287,7 +287,7 @@ button.danger:hover {
 .guest-header {
 	display: flex;
 	justify-content: space-between;
-	align-items: center;
+  align-items: center;
 	margin-bottom: 0.5rem;
 }
 
