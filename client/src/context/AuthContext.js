@@ -65,6 +65,7 @@ export const AuthProvider = ({ children }) => {
 
 			return { success: true };
 		} catch (err) {
+			console.error("Login error:", err);
 			return {
 				success: false,
 				error: err.response?.data?.message || "Login failed",
@@ -74,22 +75,53 @@ export const AuthProvider = ({ children }) => {
 
 	const register = async (userData) => {
 		try {
+			console.log("Sending registration request:", userData);
 			const res = await axios.post("/api/auth/register", userData);
+			console.log("Registration response:", res.data);
 
-			localStorage.setItem("token", res.data.token);
+			// Check if we got a token back
+			if (res.data.token) {
+				localStorage.setItem("token", res.data.token);
 
-			setAuth({
-				token: res.data.token,
-				isAuthenticated: true,
-				user: res.data.user,
-				loading: false,
-			});
+				setAuth({
+					token: res.data.token,
+					isAuthenticated: true,
+					user: res.data.user,
+					loading: false,
+				});
 
-			return { success: true };
-		} catch (err) {
+				return { success: true };
+			} else if (
+				res.data.message &&
+				res.data.message.includes("token generation failed")
+			) {
+				// Handle case where user was created but token generation failed
+				return {
+					success: true,
+					warning: "Account created but you need to log in separately",
+				};
+			}
+
+			// Unexpected response format
 			return {
 				success: false,
-				error: err.response?.data?.message || "Registration failed",
+				error: "Registration succeeded but response format was unexpected",
+			};
+		} catch (err) {
+			console.error("Registration error:", err);
+			// Check if the error has a response from the server
+			if (err.response) {
+				console.error("Server response:", err.response.data);
+				return {
+					success: false,
+					error: err.response.data.message || "Registration failed",
+				};
+			}
+			// Network error or other issue
+			return {
+				success: false,
+				error:
+					err.message || "Registration failed. Please check your connection.",
 			};
 		}
 	};

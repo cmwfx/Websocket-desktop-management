@@ -7,6 +7,7 @@ const { authMiddleware, adminMiddleware } = require("../middleware/auth");
 // Register a new user
 router.post("/register", async (req, res) => {
 	try {
+		console.log("Registration request received:", req.body);
 		const { username, password, email, fullName } = req.body;
 
 		// Check if user already exists
@@ -26,25 +27,44 @@ router.post("/register", async (req, res) => {
 		});
 
 		await user.save();
+		console.log("User saved successfully:", user._id);
 
 		// Generate JWT token
-		const token = jwt.sign(
-			{ id: user._id, username: user.username, role: user.role },
-			process.env.JWT_SECRET,
-			{ expiresIn: "24h" }
+		console.log(
+			"Generating JWT token with secret:",
+			process.env.JWT_SECRET ? "Secret exists" : "Secret missing"
 		);
+		try {
+			const token = jwt.sign(
+				{ id: user._id, username: user.username, role: user.role },
+				process.env.JWT_SECRET || "fallback_secret_for_development",
+				{ expiresIn: "24h" }
+			);
+			console.log("JWT token generated successfully");
 
-		// Return user info and token (excluding password)
-		const userResponse = {
-			_id: user._id,
-			username: user.username,
-			email: user.email,
-			fullName: user.fullName,
-			role: user.role,
-			credits: user.credits,
-		};
+			// Return user info and token (excluding password)
+			const userResponse = {
+				_id: user._id,
+				username: user.username,
+				email: user.email,
+				fullName: user.fullName,
+				role: user.role,
+				credits: user.credits,
+			};
 
-		res.status(201).json({ user: userResponse, token });
+			console.log("Sending successful response");
+			return res.status(201).json({ user: userResponse, token });
+		} catch (jwtError) {
+			console.error("JWT Error:", jwtError);
+			// If JWT fails, still return success but without token
+			return res.status(201).json({
+				message: "User registered but token generation failed",
+				user: {
+					_id: user._id,
+					username: user.username,
+				},
+			});
+		}
 	} catch (error) {
 		console.error("Registration error:", error);
 		res.status(500).json({ message: "Server error during registration" });
@@ -71,7 +91,7 @@ router.post("/login", async (req, res) => {
 		// Generate JWT token
 		const token = jwt.sign(
 			{ id: user._id, username: user.username, role: user.role },
-			process.env.JWT_SECRET,
+			process.env.JWT_SECRET || "fallback_secret_for_development",
 			{ expiresIn: "24h" }
 		);
 

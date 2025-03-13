@@ -11,6 +11,7 @@ const Register = () => {
 		fullName: "",
 	});
 	const [error, setError] = useState("");
+	const [warning, setWarning] = useState("");
 	const [loading, setLoading] = useState(false);
 	const navigate = useNavigate();
 	const { register } = useAuth();
@@ -24,6 +25,7 @@ const Register = () => {
 	const onSubmit = async (e) => {
 		e.preventDefault();
 		setError("");
+		setWarning("");
 		setLoading(true);
 
 		// Check if passwords match
@@ -34,6 +36,7 @@ const Register = () => {
 		}
 
 		try {
+			console.log("Submitting registration form...");
 			const result = await register({
 				username,
 				password,
@@ -41,12 +44,24 @@ const Register = () => {
 				fullName,
 			});
 
+			console.log("Registration result:", result);
+
 			if (result.success) {
-				navigate("/dashboard");
+				if (result.warning) {
+					// If there's a warning, show it and redirect to login
+					setWarning(result.warning);
+					setTimeout(() => {
+						navigate("/login");
+					}, 3000);
+				} else {
+					// Otherwise redirect to dashboard
+					navigate("/dashboard");
+				}
 			} else {
 				setError(result.error || "Registration failed. Please try again.");
 			}
 		} catch (err) {
+			console.error("Registration error:", err);
 			setError("Registration failed. Please try again.");
 		} finally {
 			setLoading(false);
@@ -58,6 +73,7 @@ const Register = () => {
 			<div className="register-form">
 				<h2>Create an Account</h2>
 				{error && <div className="alert alert-danger">{error}</div>}
+				{warning && <div className="alert alert-warning">{warning}</div>}
 				<form onSubmit={onSubmit}>
 					<div className="form-group">
 						<label>Username</label>

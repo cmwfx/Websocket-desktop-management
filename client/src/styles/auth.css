@@ -87,6 +87,12 @@ input:focus {
 	border: 1px solid #fcc;
 }
 
+.alert-warning {
+	background-color: #fff8e1;
+	color: #856404;
+	border: 1px solid #ffeeba;
+}
+
 .mt-3 {
 	margin-top: 1rem;
 	text-align: center;
