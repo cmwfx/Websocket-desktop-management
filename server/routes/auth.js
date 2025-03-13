@@ -134,8 +134,16 @@ router.post("/create-admin", async (req, res) => {
 		console.log("Received admin secret:", adminSecret);
 		console.log("Expected admin secret from env:", process.env.ADMIN_SECRET);
 
-		// Verify admin secret
-		if (adminSecret !== process.env.ADMIN_SECRET) {
+		// Make sure the admin secret is loaded
+		if (!process.env.ADMIN_SECRET) {
+			console.error("ADMIN_SECRET environment variable is not set");
+			return res
+				.status(500)
+				.json({ message: "Server configuration error: ADMIN_SECRET not set" });
+		}
+
+		// Verify admin secret - use trim() to remove any whitespace
+		if (adminSecret.trim() !== process.env.ADMIN_SECRET.trim()) {
 			return res.status(401).json({ message: "Invalid admin secret" });
 		}
 
