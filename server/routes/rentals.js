@@ -6,31 +6,6 @@ const User = require("../models/User");
 const PasswordChangeHistory = require("../models/PasswordChangeHistory");
 const { authMiddleware, adminMiddleware } = require("../middleware/auth");
 
-// Add this function at the top with other imports
-function generateSecurePassword() {
-	const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	const lowercase = "abcdefghijklmnopqrstuvwxyz";
-	const numbers = "0123456789";
-	const special = "!@#$%^&*";
-
-	// Get at least one character from each category
-	const pass = [
-		uppercase[Math.floor(Math.random() * uppercase.length)],
-		lowercase[Math.floor(Math.random() * lowercase.length)],
-		numbers[Math.floor(Math.random() * numbers.length)],
-		special[Math.floor(Math.random() * special.length)],
-	];
-
-	// Add 4 more random characters
-	const allChars = uppercase + lowercase + numbers + special;
-	for (let i = 0; i < 4; i++) {
-		pass.push(allChars[Math.floor(Math.random() * allChars.length)]);
-	}
-
-	// Shuffle the array and join to string
-	return pass.sort(() => Math.random() - 0.5).join("");
-}
-
 // Get all rentals (admin only)
 router.get("/", adminMiddleware, async (req, res) => {
 	try {
@@ -325,7 +300,19 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 		}
 
 		// Handle password change and notifications
-		const newPassword = generateSecurePassword();
+		const generatePassword = () => {
+			// Generate random lowercase letters
+			const randomLetters = Math.random()
+				.toString(36)
+				.substring(2, 8)
+				.toLowerCase();
+			// Capitalize first letter and add exclamation mark
+			return (
+				randomLetters.charAt(0).toUpperCase() + randomLetters.slice(1) + "!"
+			);
+		};
+
+		const newPassword = generatePassword();
 		const passwordHistory = new PasswordChangeHistory({
 			computerId: computer._id,
 			guestId: computer.guestId,
@@ -420,8 +407,18 @@ async function expireRental(rentalId) {
 			computer.currentUser = null;
 			await computer.save();
 
-			// Generate a new password
-			const newPassword = generateSecurePassword();
+			// Generate a new password with the required pattern
+			const generatePassword = () => {
+				const randomLetters = Math.random()
+					.toString(36)
+					.substring(2, 8)
+					.toLowerCase();
+				return (
+					randomLetters.charAt(0).toUpperCase() + randomLetters.slice(1) + "!"
+				);
+			};
+
+			const newPassword = generatePassword();
 
 			// Create password history entry
 			const passwordHistory = new PasswordChangeHistory({
