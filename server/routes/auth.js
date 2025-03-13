@@ -131,6 +131,9 @@ router.post("/create-admin", async (req, res) => {
 	try {
 		const { username, password, adminSecret } = req.body;
 
+		console.log("Received admin secret:", adminSecret);
+		console.log("Expected admin secret from env:", process.env.ADMIN_SECRET);
+
 		// Verify admin secret
 		if (adminSecret !== process.env.ADMIN_SECRET) {
 			return res.status(401).json({ message: "Invalid admin secret" });
