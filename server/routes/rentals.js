@@ -6,6 +6,16 @@ const User = require("../models/User");
 const PasswordChangeHistory = require("../models/PasswordChangeHistory");
 const { authMiddleware, adminMiddleware } = require("../middleware/auth");
 
+// Add this function at the top with other imports
+function generateLetterPassword(length = 8) {
+	const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+	let password = "";
+	for (let i = 0; i < length; i++) {
+		password += letters.charAt(Math.floor(Math.random() * letters.length));
+	}
+	return password;
+}
+
 // Get all rentals (admin only)
 router.get("/", adminMiddleware, async (req, res) => {
 	try {
@@ -300,7 +310,7 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 		}
 
 		// Handle password change and notifications
-		const newPassword = Math.random().toString(36).slice(-8);
+		const newPassword = generateLetterPassword(8);
 		const passwordHistory = new PasswordChangeHistory({
 			computerId: computer._id,
 			guestId: computer.guestId,
@@ -396,7 +406,7 @@ async function expireRental(rentalId) {
 			await computer.save();
 
 			// Generate a new password
-			const newPassword = Math.random().toString(36).slice(-8);
+			const newPassword = generateLetterPassword(8);
 
 			// Create password history entry
 			const passwordHistory = new PasswordChangeHistory({
