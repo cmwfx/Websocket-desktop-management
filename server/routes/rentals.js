@@ -197,10 +197,11 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 			rentalId: req.params.id,
 			userId: req.user.id,
 			userRole: req.user.role,
-			headers: req.headers,
 		});
 
-		const rental = await Rental.findById(req.params.id);
+		const rental = await Rental.findById(req.params.id)
+			.populate("userId")
+			.populate("computerId");
 
 		if (!rental) {
 			console.log(`Rental ${req.params.id} not found`);
@@ -209,24 +210,32 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 
 		console.log("Found rental:", {
 			rentalId: rental._id,
-			userId: rental.userId,
+			userId: rental.userId._id,
+			userRole: req.user.role,
 			status: rental.status,
 		});
 
 		// Check if user is admin or the rental owner
 		const isAdmin = req.user.role === "admin";
-		const isOwner = rental.userId.toString() === req.user.id;
+		// Convert both IDs to strings for comparison
+		const isOwner = rental.userId._id.toString() === req.user.id.toString();
 
 		console.log("Authorization check:", {
 			isAdmin,
 			isOwner,
 			userRole: req.user.role,
 			userId: req.user.id,
-			rentalUserId: rental.userId.toString(),
+			rentalUserId: rental.userId._id.toString(),
 		});
 
 		if (!isAdmin && !isOwner) {
-			console.log("Authorization failed for rental cancellation");
+			console.log("Authorization failed for rental cancellation", {
+				isAdmin,
+				isOwner,
+				userRole: req.user.role,
+				userId: req.user.id,
+				rentalUserId: rental.userId._id.toString(),
+			});
 			return res.status(403).json({
 				message: "Not authorized to cancel this rental",
 				error: "ERR_UNAUTHORIZED",
