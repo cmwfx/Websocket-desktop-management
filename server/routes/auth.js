@@ -119,7 +119,18 @@ router.get("/profile", authMiddleware, async (req, res) => {
 		if (!user) {
 			return res.status(404).json({ message: "User not found" });
 		}
-		res.json(user);
+
+		// Explicitly structure the response to include all necessary fields
+		const userResponse = {
+			_id: user._id,
+			username: user.username,
+			email: user.email,
+			fullName: user.fullName,
+			role: user.role,
+			credits: user.credits,
+		};
+
+		res.json(userResponse);
 	} catch (error) {
 		console.error("Profile error:", error);
 		res.status(500).json({ message: "Server error" });
