@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import GuestManager from "./GuestManager";
 import CommandPanel from "./CommandPanel";
 import ComputerRental from "./ComputerRental";
+import UserManagement from "./UserManagement";
 import "../styles/dashboard.css";
 
 // Use relative URLs in production:
@@ -192,7 +193,7 @@ const Dashboard = () => {
 
 			<div className="dashboard-content">
 				{isAdmin ? (
-					// Admin view - show guest management and command panel
+					// Admin view - show guest management, command panel, and user management
 					<>
 						<div className="dashboard-sidebar">
 							<GuestManager
@@ -236,6 +237,10 @@ const Dashboard = () => {
 										))
 									)}
 								</div>
+							</div>
+
+							<div className="user-management-section">
+								<UserManagement />
 							</div>
 						</div>
 					</>

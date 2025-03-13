@@ -29,23 +29,22 @@ router.get("/:id", adminMiddleware, async (req, res) => {
 });
 
 // Add credits to a user (admin only)
-router.post("/:id/add-credits", adminMiddleware, async (req, res) => {
+router.post("/:userId/add-credits", adminMiddleware, async (req, res) => {
 	try {
-		const { amount } = req.body;
+		const { userId } = req.params;
+		const { credits } = req.body;
 
-		// Validate amount
-		if (!amount || amount <= 0) {
-			return res.status(400).json({ message: "Amount must be greater than 0" });
+		if (!credits || credits <= 0) {
+			return res.status(400).json({ message: "Invalid credit amount" });
 		}
 
-		// Find user
-		const user = await User.findById(req.params.id);
+		const user = await User.findById(userId);
 		if (!user) {
 			return res.status(404).json({ message: "User not found" });
 		}
 
-		// Add credits
-		user.credits += amount;
+		// Add credits to user's balance
+		user.credits = (user.credits || 0) + credits;
 		await user.save();
 
 		res.json({
