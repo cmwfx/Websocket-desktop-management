@@ -12,10 +12,18 @@ const ComputerSchema = new mongoose.Schema(
 			type: String,
 			required: true,
 		},
+		isRegistered: {
+			type: Boolean,
+			default: false,
+		},
+		isRented: {
+			type: Boolean,
+			default: false,
+		},
 		status: {
 			type: String,
-			enum: ["available", "rented"],
-			default: "available",
+			enum: ["available", "rented", "offline"],
+			default: "offline",
 		},
 		currentUser: {
 			type: mongoose.Schema.Types.ObjectId,
@@ -49,5 +57,10 @@ ComputerSchema.virtual("guestInfo", {
 	foreignField: "guestId",
 	justOne: true,
 });
+
+// Method to check if computer is available for rent
+ComputerSchema.methods.isAvailableForRent = function () {
+	return this.isRegistered && !this.isRented && this.status === "available";
+};
 
 module.exports = mongoose.model("Computer", ComputerSchema);

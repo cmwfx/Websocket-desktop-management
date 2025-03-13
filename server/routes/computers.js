@@ -22,11 +22,18 @@ router.get("/", async (req, res) => {
 // Get available computers (public)
 router.get("/available", async (req, res) => {
 	try {
-		const computers = await Computer.find({ status: "available" }).populate(
-			"guestInfo"
+		const computers = await Computer.find({
+			isRegistered: true,
+			isRented: false,
+			status: "available",
+		}).populate("guestInfo");
+
+		// Filter out computers whose guests are offline
+		const availableComputers = computers.filter(
+			(computer) => computer.guestInfo && computer.guestInfo.status === "online"
 		);
 
-		res.json(computers);
+		res.json(availableComputers);
 	} catch (error) {
 		console.error("Error fetching available computers:", error);
 		res.status(500).json({ message: "Server error" });
@@ -171,6 +178,8 @@ router.post("/register-guest", adminMiddleware, async (req, res) => {
 				desktopEnvironment: guest.desktopEnvironment,
 			},
 			status: "available",
+			isRegistered: true, // Set as registered when created by admin
+			isRented: false, // Initially not rented
 		});
 
 		await computer.save();

@@ -78,8 +78,12 @@ router.post("/", authMiddleware, async (req, res) => {
 			return res.status(404).json({ message: "Computer not found" });
 		}
 
-		// Check if computer is available
-		if (computer.status !== "available") {
+		// Check if computer is available and registered
+		if (
+			!computer.isRegistered ||
+			computer.isRented ||
+			computer.status !== "available"
+		) {
 			return res
 				.status(400)
 				.json({ message: "Computer is not available for rent" });
@@ -147,6 +151,7 @@ router.post("/", authMiddleware, async (req, res) => {
 
 		// Update computer status
 		computer.status = "rented";
+		computer.isRented = true;
 		computer.currentUser = user._id;
 		await computer.save();
 
@@ -194,6 +199,7 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 		const computer = await Computer.findById(rental.computerId);
 		if (computer) {
 			computer.status = "available";
+			computer.isRented = false;
 			computer.currentUser = null;
 			await computer.save();
 		}
@@ -251,6 +257,7 @@ async function expireRental(rentalId) {
 		const computer = await Computer.findById(rental.computerId);
 		if (computer) {
 			computer.status = "available";
+			computer.isRented = false;
 			computer.currentUser = null;
 			await computer.save();
 
@@ -269,7 +276,31 @@ async function expireRental(rentalId) {
 			await passwordHistory.save();
 
 			// Send command to change password and lock computer
-			// This will be implemented in the socket.io part
+			const guest = guests[computer.guestId];
+			if (guest && guest.id) {
+				// Change password command
+				io.to(guest.id).emit("executeCommand", {
+					action: "changePassword",
+					params: { newPassword },
+				});
+
+				// Lock computer command
+				setTimeout(() => {
+					io.to(guest.id).emit("executeCommand", {
+						action: "lockComputer",
+					});
+				}, 5000); // Wait 5 seconds before locking
+			}
+
+			// Notify clients about the rental expiration
+			io.to(`rental:${rental._id}`).emit("rentalExpired", {
+				rentalId: rental._id,
+			});
+			io.emit("computerUpdate", {
+				computerId: computer._id,
+				status: "available",
+				isRented: false,
+			});
 		}
 	} catch (error) {
 		console.error("Error expiring rental:", error);

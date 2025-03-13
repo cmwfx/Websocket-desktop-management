@@ -547,6 +547,7 @@ async function checkExpiredRentals() {
 			if (computer) {
 				computer.status = "available";
 				computer.currentUser = null;
+				computer.isRented = false; // Set isRented to false when rental expires
 				await computer.save();
 
 				// Generate a new password
@@ -587,6 +588,7 @@ async function checkExpiredRentals() {
 				io.emit("computerUpdate", {
 					computerId: computer._id,
 					status: "available",
+					isRented: false,
 				});
 			}
 		}
