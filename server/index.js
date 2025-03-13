@@ -84,7 +84,7 @@ const MONGODB_URI =
 let isMongoConnected = false;
 
 // Helper function to safely perform database operations
-async function safeDbOperation(operation, fallback) {
+async function safeDbOperation(operation, fallback = null) {
 	if (!isMongoConnected) {
 		console.log("Skipping database operation - MongoDB not connected");
 		return fallback;
@@ -129,34 +129,54 @@ mongoose
 // In-memory registry for guest agents
 const guests = {};
 
-// Helper function to get full guest list
+// Make guests registry available to routes
+app.set("guests", guests);
+
+// Helper function to get full guest list with status
 async function getFullGuestList() {
 	try {
-		const fullGuests = await Guest.find({
-			$or: [{ status: "online" }, { guestId: { $in: Object.keys(guests) } }],
-		}).lean();
+		// Get all guests from MongoDB that were active in the last 5 minutes
+		const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+		const dbGuests = await Guest.find({
+			$or: [{ lastSeen: { $gte: fiveMinutesAgo } }, { status: "online" }],
+		});
 
-		const guestList = fullGuests.map((g) => ({
-			...g,
-			status: Object.keys(guests).includes(g.guestId) ? "online" : "offline",
-			lastSeen: Object.keys(guests).includes(g.guestId)
-				? new Date()
-				: g.lastSeen,
-		}));
+		// Convert to object for easier lookup
+		const guestMap = {};
+		dbGuests.forEach((guest) => {
+			const guestObj = guest.toObject();
 
-		return guestList;
+			// Check if guest is in memory (currently connected)
+			if (guests[guest.guestId]) {
+				guestObj.status = "online";
+				guestObj.lastSeen = guests[guest.guestId].lastSeen;
+			} else if (guest.lastSeen >= fiveMinutesAgo) {
+				guestObj.status = "online";
+			} else {
+				guestObj.status = "offline";
+			}
+
+			guestMap[guest.guestId] = guestObj;
+		});
+
+		// Add any in-memory guests that might not be in DB yet
+		Object.entries(guests).forEach(([guestId, guestData]) => {
+			if (!guestMap[guestId]) {
+				guestMap[guestId] = {
+					guestId,
+					...guestData,
+					status: "online",
+				};
+			}
+		});
+
+		return Object.values(guestMap);
 	} catch (error) {
 		console.error("Error getting full guest list:", error);
-		// Fallback to in-memory guests
-		return Object.keys(guests).map((id) => ({
-			guestId: id,
-			status: "online",
-			lastSeen: new Date(),
-			hostname: guests[id].hostname || "Unknown",
-			ipAddress: guests[id].ipAddress || "Unknown",
-			osInfo: guests[id].osInfo || "Unknown",
-			windowsVersion: guests[id].windowsVersion || "Unknown",
-			desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
+		// Return in-memory guests as fallback
+		return Object.entries(guests).map(([guestId, data]) => ({
+			guestId,
+			...data,
 		}));
 	}
 }
@@ -201,6 +221,17 @@ io.on("connection", (socket) => {
 
 				await guest.save();
 				console.log(`Updated existing guest: ${guest.guestId}`);
+
+				// Update computer status if this guest is registered as a computer
+				const computer = await Computer.findOne({ guestId: guest.guestId });
+				if (computer) {
+					computer.status = "available";
+					await computer.save();
+					io.emit("computerUpdate", {
+						computerId: computer._id,
+						status: "available",
+					});
+				}
 			} else {
 				// Create new guest
 				console.log(
@@ -237,23 +268,23 @@ io.on("connection", (socket) => {
 			// If this was an existing guest with a different ID, clean up old reference
 			if (existingGuestId && existingGuestId !== guest.guestId) {
 				delete guests[existingGuestId];
+
+				// Also update any computer references
+				const computer = await Computer.findOne({ guestId: existingGuestId });
+				if (computer) {
+					computer.guestId = guest.guestId;
+					await computer.save();
+				}
 			}
+
+			// Update the app's guests registry
+			app.set("guests", guests);
 
 			console.log(`Updated in-memory guests registry`);
 
 			// Get and emit the full guest list
 			const guestList = await getFullGuestList();
 			io.emit("guestUpdate", guestList);
-
-			// Check if this guest is registered as a computer
-			const computer = await Computer.findOne({ guestId: guest.guestId });
-			if (computer) {
-				console.log(`Guest ${guest.guestId} is registered as a computer`);
-				io.emit("computerUpdate", {
-					computerId: computer._id,
-					status: "online",
-				});
-			}
 		} catch (error) {
 			console.error("Error handling guest registration:", error);
 			// Even if DB operations fail, maintain socket connection in memory
@@ -268,6 +299,7 @@ io.on("connection", (socket) => {
 				lastSeen: new Date(),
 				status: "online",
 			};
+			app.set("guests", guests);
 		}
 	});
 
@@ -362,6 +394,9 @@ io.on("connection", (socket) => {
 				delete guests[id];
 				console.log(`Guest ${id} disconnected from socket`);
 
+				// Update the app's guests registry
+				app.set("guests", guests);
+
 				// Update guest status in database
 				await safeDbOperation(async () => {
 					console.log(`Looking for disconnected guest in database: ${id}`);
@@ -377,6 +412,18 @@ io.on("connection", (socket) => {
 							`Updated guest status to offline in database: ${id}`,
 							JSON.stringify(savedGuest.toObject(), null, 2)
 						);
+
+						// Update computer status if this guest is registered as a computer
+						const computer = await Computer.findOne({ guestId: id });
+						if (computer && !computer.isRented) {
+							// Only update status if not rented
+							computer.status = "offline";
+							await computer.save();
+							io.emit("computerUpdate", {
+								computerId: computer._id,
+								status: "offline",
+							});
+						}
 
 						// Get and emit the full guest list
 						const guestList = await getFullGuestList();
