@@ -116,7 +116,12 @@ const Dashboard = () => {
 	};
 
 	// Determine if user is admin
-	const isAdmin = auth.user?.role === "admin";
+	const isAdmin = auth?.user?.role === "admin";
+
+	// If auth is still loading or user is not available, show loading state
+	if (auth?.loading || !auth?.user) {
+		return <div className="loading">Loading dashboard...</div>;
+	}
 
 	return (
 		<div className="dashboard">
@@ -130,12 +135,12 @@ const Dashboard = () => {
 				<div className="header-right">
 					<div className="user-menu-container">
 						<div className="user-info" onClick={toggleUserMenu}>
-							<span className="username">{auth.user?.username || "User"}</span>
+							<span className="username">{auth?.user?.username || "User"}</span>
 							<span className={`role-badge ${isAdmin ? "admin" : ""}`}>
-								{auth.user?.role || "user"}
+								{auth?.user?.role || "user"}
 							</span>
 							<span className="credits">
-								Credits: {auth.user?.credits || 0}
+								Credits: {auth?.user?.credits || 0}
 							</span>
 							<i className="dropdown-icon">▼</i>
 						</div>

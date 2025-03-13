@@ -15,6 +15,9 @@ const ComputerRental = () => {
 	const [rentalToCancel, setRentalToCancel] = useState(null);
 	const { auth } = useAuth();
 
+	// Check if auth is available
+	const userCredits = auth?.user?.credits || 0;
+
 	useEffect(() => {
 		// Fetch available computers
 		const fetchComputers = async () => {
@@ -34,9 +37,15 @@ const ComputerRental = () => {
 		const fetchRentals = async () => {
 			try {
 				const response = await axios.get("/api/rentals/my-rentals");
-				setActiveRentals(
-					response.data.filter((rental) => rental.status === "active")
-				);
+				// Ensure response.data is an array before filtering
+				if (Array.isArray(response.data)) {
+					setActiveRentals(
+						response.data.filter((rental) => rental.status === "active")
+					);
+				} else {
+					console.error("Expected array but got:", response.data);
+					setActiveRentals([]);
+				}
 			} catch (err) {
 				console.error("Error fetching rentals:", err);
 			}
@@ -152,6 +161,11 @@ const ComputerRental = () => {
 		return `${diffHrs}h ${diffMins}m remaining`;
 	};
 
+	// Check if auth is still loading
+	if (auth?.loading) {
+		return <div className="loading">Loading user data...</div>;
+	}
+
 	if (loading) {
 		return <div className="loading">Loading computers...</div>;
 	}
@@ -168,38 +182,39 @@ const ComputerRental = () => {
 					<p className="no-rentals">You don't have any active rentals</p>
 				) : (
 					<div className="rental-list">
-						{activeRentals.map((rental) => (
-							<div key={rental._id} className="rental-card">
-								<div className="rental-header">
-									<h3>{rental.computerId.computerName}</h3>
-									<span className="time-remaining">
-										{formatTimeRemaining(rental.endTime)}
-									</span>
+						{Array.isArray(activeRentals) &&
+							activeRentals.map((rental) => (
+								<div key={rental._id} className="rental-card">
+									<div className="rental-header">
+										<h3>{rental.computerId.computerName}</h3>
+										<span className="time-remaining">
+											{formatTimeRemaining(rental.endTime)}
+										</span>
+									</div>
+									<div className="rental-details">
+										<p>
+											<strong>Password:</strong> {rental.password}
+										</p>
+										<p>
+											<strong>Start Time:</strong>{" "}
+											{new Date(rental.startTime).toLocaleString()}
+										</p>
+										<p>
+											<strong>End Time:</strong>{" "}
+											{new Date(rental.endTime).toLocaleString()}
+										</p>
+										<p>
+											<strong>Cost:</strong> ${rental.cost}
+										</p>
+									</div>
+									<button
+										className="cancel-button"
+										onClick={() => openCancelConfirmModal(rental._id)}
+									>
+										Cancel Rental
+									</button>
 								</div>
-								<div className="rental-details">
-									<p>
-										<strong>Password:</strong> {rental.password}
-									</p>
-									<p>
-										<strong>Start Time:</strong>{" "}
-										{new Date(rental.startTime).toLocaleString()}
-									</p>
-									<p>
-										<strong>End Time:</strong>{" "}
-										{new Date(rental.endTime).toLocaleString()}
-									</p>
-									<p>
-										<strong>Cost:</strong> ${rental.cost}
-									</p>
-								</div>
-								<button
-									className="cancel-button"
-									onClick={() => openCancelConfirmModal(rental._id)}
-								>
-									Cancel Rental
-								</button>
-							</div>
-						))}
+							))}
 					</div>
 				)}
 			</div>
@@ -210,37 +225,40 @@ const ComputerRental = () => {
 					<p className="no-computers">No computers available for rent</p>
 				) : (
 					<div className="computer-list">
-						{computers.map((computer) => (
-							<div key={computer._id} className="computer-card">
-								<h3>{computer.computerName}</h3>
-								<div className="computer-details">
-									<p>
-										<strong>Specifications:</strong>
-									</p>
-									<ul>
-										{computer.specifications.osInfo && (
-											<li>OS: {computer.specifications.osInfo}</li>
-										)}
-										{computer.specifications.windowsVersion && (
-											<li>Windows: {computer.specifications.windowsVersion}</li>
-										)}
-									</ul>
-									<p>
-										<strong>Rate:</strong> ${computer.hourlyRate}/hour
-									</p>
+						{Array.isArray(computers) &&
+							computers.map((computer) => (
+								<div key={computer._id} className="computer-card">
+									<h3>{computer.computerName}</h3>
+									<div className="computer-details">
+										<p>
+											<strong>Specifications:</strong>
+										</p>
+										<ul>
+											{computer.specifications.osInfo && (
+												<li>OS: {computer.specifications.osInfo}</li>
+											)}
+											{computer.specifications.windowsVersion && (
+												<li>
+													Windows: {computer.specifications.windowsVersion}
+												</li>
+											)}
+										</ul>
+										<p>
+											<strong>Rate:</strong> ${computer.hourlyRate}/hour
+										</p>
+									</div>
+									<button
+										className="rent-button"
+										onClick={() => openRentalModal(computer)}
+										disabled={userCredits < computer.hourlyRate}
+									>
+										Rent Computer
+									</button>
+									{userCredits < computer.hourlyRate && (
+										<p className="insufficient-credits">Insufficient credits</p>
+									)}
 								</div>
-								<button
-									className="rent-button"
-									onClick={() => openRentalModal(computer)}
-									disabled={auth.user?.credits < computer.hourlyRate}
-								>
-									Rent Computer
-								</button>
-								{auth.user?.credits < computer.hourlyRate && (
-									<p className="insufficient-credits">Insufficient credits</p>
-								)}
-							</div>
-						))}
+							))}
 					</div>
 				)}
 			</div>
@@ -256,7 +274,7 @@ const ComputerRental = () => {
 								<strong>Rate:</strong> ${selectedComputer.hourlyRate}/hour
 							</p>
 							<p>
-								<strong>Your Credits:</strong> {auth.user?.credits || 0}
+								<strong>Your Credits:</strong> {userCredits}
 							</p>
 
 							<div className="duration-selector">
@@ -275,7 +293,7 @@ const ComputerRental = () => {
 								<strong>Total Cost:</strong> ${calculateTotalCost()}
 							</p>
 
-							{calculateTotalCost() > auth.user?.credits && (
+							{calculateTotalCost() > userCredits && (
 								<p className="insufficient-credits">
 									You don't have enough credits for this rental duration
 								</p>
@@ -289,7 +307,7 @@ const ComputerRental = () => {
 							<button
 								className="confirm-button"
 								onClick={handleRentComputer}
-								disabled={calculateTotalCost() > auth.user?.credits}
+								disabled={calculateTotalCost() > userCredits}
 							>
 								Confirm Rental
 							</button>
