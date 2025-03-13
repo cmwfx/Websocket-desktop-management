@@ -118,7 +118,13 @@ router.post("/", authMiddleware, async (req, res) => {
 			username = latestPasswordChange.username;
 		} else {
 			// Generate a random password if no history exists
-			password = Math.random().toString(36).slice(-8);
+			const randomChars = Math.random()
+				.toString(36)
+				.substring(2, 8)
+				.toLowerCase();
+			const firstLetter = randomChars.charAt(0).toUpperCase();
+			const middleChars = randomChars.substring(1);
+			password = `${firstLetter}${middleChars}!`;
 			username = "Administrator";
 
 			// Create password history entry
@@ -300,19 +306,17 @@ router.post("/:id/cancel", authMiddleware, async (req, res) => {
 		}
 
 		// Handle password change and notifications
-		const generatePassword = () => {
-			// Generate random lowercase letters
-			const randomLetters = Math.random()
-				.toString(36)
-				.substring(2, 8)
-				.toLowerCase();
-			// Capitalize first letter and add exclamation mark
-			return (
-				randomLetters.charAt(0).toUpperCase() + randomLetters.slice(1) + "!"
-			);
-		};
+		// Generate a new password with capital first letter, lowercase in middle, and ! at end
+		const randomChars = Math.random()
+			.toString(36)
+			.substring(2, 8)
+			.toLowerCase();
+		const firstLetter = randomChars.charAt(0).toUpperCase();
+		const middleChars = randomChars.substring(1);
+		const newPassword = `${firstLetter}${middleChars}!`;
 
-		const newPassword = generatePassword();
+		console.log(`Generated new password: ${newPassword}`);
+
 		const passwordHistory = new PasswordChangeHistory({
 			computerId: computer._id,
 			guestId: computer.guestId,
@@ -407,18 +411,14 @@ async function expireRental(rentalId) {
 			computer.currentUser = null;
 			await computer.save();
 
-			// Generate a new password with the required pattern
-			const generatePassword = () => {
-				const randomLetters = Math.random()
-					.toString(36)
-					.substring(2, 8)
-					.toLowerCase();
-				return (
-					randomLetters.charAt(0).toUpperCase() + randomLetters.slice(1) + "!"
-				);
-			};
-
-			const newPassword = generatePassword();
+			// Generate a new password with capital first letter, lowercase in middle, and ! at end
+			const randomChars = Math.random()
+				.toString(36)
+				.substring(2, 8)
+				.toLowerCase();
+			const firstLetter = randomChars.charAt(0).toUpperCase();
+			const middleChars = randomChars.substring(1);
+			const newPassword = `${firstLetter}${middleChars}!`;
 
 			// Create password history entry
 			const passwordHistory = new PasswordChangeHistory({
