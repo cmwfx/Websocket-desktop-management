@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { io } from "socket.io-client";
-import axios from "axios";
+import axios from "../utils/axios";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import GuestManager from "./GuestManager";
 import CommandPanel from "./CommandPanel";
+import "../styles/dashboard.css";
 
 // Use relative URLs in production:
 const BACKEND_URL =
@@ -16,6 +19,9 @@ const Dashboard = () => {
 	const [selectedGuest, setSelectedGuest] = useState(null);
 	const [commandResults, setCommandResults] = useState([]);
 	const [isConnected, setIsConnected] = useState(false);
+	const [showUserMenu, setShowUserMenu] = useState(false);
+	const { auth, logout } = useAuth();
+	const navigate = useNavigate();
 
 	useEffect(() => {
 		// Fetch initial list of guests
@@ -99,12 +105,50 @@ const Dashboard = () => {
 		}
 	};
 
+	const handleLogout = () => {
+		logout();
+		navigate("/login");
+	};
+
+	const toggleUserMenu = () => {
+		setShowUserMenu(!showUserMenu);
+	};
+
 	return (
 		<div className="dashboard">
 			<div className="dashboard-header">
-				<h1>Desktop Management Dashboard</h1>
-				<div className="connection-status">
-					Status: {isConnected ? "Connected" : "Disconnected"}
+				<div className="header-left">
+					<h1>Desktop Management Dashboard</h1>
+					<div className="connection-status">
+						Status: {isConnected ? "Connected" : "Disconnected"}
+					</div>
+				</div>
+				<div className="header-right">
+					<div className="user-menu-container">
+						<div className="user-info" onClick={toggleUserMenu}>
+							<span className="username">{auth.user?.username || "User"}</span>
+							<span className="role-badge">{auth.user?.role || "user"}</span>
+							<span className="credits">
+								Credits: {auth.user?.credits || 0}
+							</span>
+							<i className="dropdown-icon">▼</i>
+						</div>
+						{showUserMenu && (
+							<div className="user-dropdown">
+								<div className="dropdown-item">
+									<span>Profile</span>
+								</div>
+								{auth.user?.role === "admin" && (
+									<div className="dropdown-item">
+										<span>Admin Panel</span>
+									</div>
+								)}
+								<div className="dropdown-item" onClick={handleLogout}>
+									<span>Logout</span>
+								</div>
+							</div>
+						)}
+					</div>
 				</div>
 			</div>
 
