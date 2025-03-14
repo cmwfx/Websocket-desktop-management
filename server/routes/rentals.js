@@ -424,12 +424,17 @@ async function expireRental(rentalId) {
 			const passwordHistory = new PasswordChangeHistory({
 				computerId: computer._id,
 				guestId: computer.guestId,
+				username: rental.username,
 				password: newPassword,
 				changedBy: "rental",
 				rentalId: rental._id,
 			});
 
 			await passwordHistory.save();
+
+			// Get the io instance and guests registry
+			const io = global.io;
+			const guests = global.guests || {};
 
 			// Send command to change password and lock computer
 			const guest = guests[computer.guestId];
