@@ -7,7 +7,6 @@ import GuestManager from "./GuestManager";
 import CommandPanel from "./CommandPanel";
 import ComputerRental from "./ComputerRental";
 import UserManagement from "./UserManagement";
-import ComputerManagement from "./ComputerManagement";
 import "../styles/dashboard.css";
 
 // Use relative URLs in production:
@@ -23,7 +22,7 @@ const Dashboard = () => {
 	const [commandResults, setCommandResults] = useState([]);
 	const [isConnected, setIsConnected] = useState(false);
 	const [showUserMenu, setShowUserMenu] = useState(false);
-	const [activeTab, setActiveTab] = useState("guests"); // Add active tab state for admin view
+	const [activeTab, setActiveTab] = useState("guests");
 	const [loading, setLoading] = useState(true);
 	const { auth, logout } = useAuth();
 	const navigate = useNavigate();
@@ -32,10 +31,10 @@ const Dashboard = () => {
 	const fetchGuests = useCallback(async () => {
 		try {
 			setLoading(true);
-			console.log("Fetching guests...");
+			console.log("Fetching guests and computers...");
 			const response = await axios.get("/api/connected-guests");
 			if (response.data.guests) {
-				console.log("Received guests:", response.data.guests.length);
+				console.log("Received guests/computers:", response.data.guests.length);
 				setGuests(response.data.guests);
 			} else {
 				console.warn("No guests returned from API");
@@ -49,7 +48,7 @@ const Dashboard = () => {
 
 	// Force refresh function
 	const handleRefreshGuests = useCallback(() => {
-		console.log("Manually refreshing guests...");
+		console.log("Manually refreshing guests and computers...");
 		fetchGuests();
 	}, [fetchGuests]);
 
@@ -223,15 +222,7 @@ const Dashboard = () => {
 						className={`tab-button ${activeTab === "guests" ? "active" : ""}`}
 						onClick={() => setActiveTab("guests")}
 					>
-						Guest Management
-					</button>
-					<button
-						className={`tab-button ${
-							activeTab === "computers" ? "active" : ""
-						}`}
-						onClick={() => setActiveTab("computers")}
-					>
-						Computer Management
+						Guest & Computer Management
 					</button>
 					<button
 						className={`tab-button ${activeTab === "users" ? "active" : ""}`}
@@ -250,7 +241,9 @@ const Dashboard = () => {
 							<>
 								<div className="dashboard-sidebar">
 									{loading ? (
-										<div className="loading-spinner">Loading guests...</div>
+										<div className="loading-spinner">
+											Loading guests and computers...
+										</div>
 									) : (
 										<>
 											<div className="guest-header-actions">
@@ -310,12 +303,6 @@ const Dashboard = () => {
 									</div>
 								</div>
 							</>
-						)}
-
-						{activeTab === "computers" && (
-							<div className="dashboard-full-width">
-								<ComputerManagement />
-							</div>
 						)}
 
 						{activeTab === "users" && (

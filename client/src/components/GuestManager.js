@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState } from "react";
+import axios from "../utils/axios";
 
 const GuestManager = ({
 	guests,
@@ -6,6 +7,8 @@ const GuestManager = ({
 	onSelectGuest,
 	onRegisterAsComputer,
 }) => {
+	const [expandedGuest, setExpandedGuest] = useState(null);
+
 	// Function to get status class
 	const getStatusClass = (guest) => {
 		if (!guest) return "status-unknown";
@@ -17,6 +20,40 @@ const GuestManager = ({
 		if (!lastSeen) return "Never";
 		const date = new Date(lastSeen);
 		return date.toLocaleString();
+	};
+
+	// Function to get computer status class
+	const getComputerStatusClass = (status) => {
+		switch (status) {
+			case "available":
+				return "status-available";
+			case "unavailable":
+				return "status-unavailable";
+			case "rented":
+				return "status-rented";
+			case "offline":
+				return "status-offline";
+			default:
+				return "status-unknown";
+		}
+	};
+
+	// Function to reset a computer's status to available
+	const handleResetStatus = async (computerId) => {
+		try {
+			await axios.put(`/api/computers/${computerId}`, {
+				status: "available",
+			});
+			alert("Computer status reset to available.");
+		} catch (err) {
+			console.error("Error resetting computer status:", err);
+			alert("Failed to reset computer status");
+		}
+	};
+
+	// Toggle guest expansion
+	const toggleExpand = (guestId) => {
+		setExpandedGuest(expandedGuest === guestId ? null : guestId);
 	};
 
 	// Filter to show online guests first, then sort by isComputer
@@ -33,9 +70,18 @@ const GuestManager = ({
 		return (a.hostname || "").localeCompare(b.hostname || "");
 	});
 
+	// Count online and computer guests
+	const onlineCount = guests.filter((g) => g.status === "online").length;
+	const computerCount = guests.filter((g) => g.isComputer).length;
+
 	return (
 		<div className="guest-manager">
-			<h3>Connected Guests {guests.length > 0 && `(${guests.length})`}</h3>
+			<h3>
+				Connected Guests{" "}
+				{guests.length > 0 &&
+					`(${guests.length} total, ${onlineCount} online, ${computerCount} computers)`}
+			</h3>
+
 			{guests.length === 0 ? (
 				<p className="no-guests">No guests connected</p>
 			) : (
@@ -47,35 +93,71 @@ const GuestManager = ({
 								selectedGuest === guest.guestId ? "selected" : ""
 							} ${guest.isComputer ? "is-computer" : ""}`}
 						>
-							<div
-								className="guest-info"
-								onClick={() => onSelectGuest(guest.guestId)}
-							>
-								<div className="guest-header">
+							<div className="guest-info">
+								<div
+									className="guest-header"
+									onClick={() => onSelectGuest(guest.guestId)}
+								>
 									<span className="guest-id">{guest.guestId}</span>
 									<span
 										className={`status-indicator ${getStatusClass(guest)}`}
 									/>
 								</div>
-								<div className="guest-details">
+
+								<div
+									className="guest-basic-details"
+									onClick={() => toggleExpand(guest.guestId)}
+								>
 									<p>Hostname: {guest.hostname || "Unknown"}</p>
 									<p>IP: {guest.ipAddress || "Unknown"}</p>
-									<p>OS: {guest.osInfo || "Unknown"}</p>
 									<p>Last Seen: {formatLastSeen(guest.lastSeen)}</p>
+
 									{guest.isComputer && (
 										<div className="computer-info">
 											<p
-												className={`computer-status status-${guest.computerStatus}`}
+												className={`computer-status ${getComputerStatusClass(
+													guest.computerStatus
+												)}`}
 											>
 												Computer Status: {guest.computerStatus || "unknown"}
 											</p>
-											{guest.computerName && (
-												<p>Computer Name: {guest.computerName}</p>
-											)}
 										</div>
 									)}
+
+									<span className="expand-toggle">
+										{expandedGuest === guest.guestId ? "▲ Less" : "▼ More"}
+									</span>
 								</div>
+
+								{expandedGuest === guest.guestId && (
+									<div className="guest-expanded-details">
+										<p>OS: {guest.osInfo || "Unknown"}</p>
+										{guest.windowsVersion && (
+											<p>Windows: {guest.windowsVersion}</p>
+										)}
+										{guest.desktopEnvironment && (
+											<p>Desktop: {guest.desktopEnvironment}</p>
+										)}
+										{guest.systemUptime && <p>Uptime: {guest.systemUptime}</p>}
+
+										{guest.isComputer && (
+											<div className="computer-expanded-info">
+												<p>Computer ID: {guest.computerId}</p>
+												{(guest.computerStatus === "unavailable" ||
+													guest.computerStatus === "offline") && (
+													<button
+														className="reset-status-btn"
+														onClick={() => handleResetStatus(guest.computerId)}
+													>
+														Reset to Available
+													</button>
+												)}
+											</div>
+										)}
+									</div>
+								)}
 							</div>
+
 							{onRegisterAsComputer && !guest.isComputer && (
 								<button
 									className="register-computer-btn"

@@ -523,3 +523,87 @@
 	border-radius: 6px;
 	font-style: italic;
 }
+
+/* Enhanced Guest Manager Styles */
+.guest-basic-details {
+	padding: 0.5rem 0;
+	cursor: pointer;
+	position: relative;
+}
+
+.expand-toggle {
+	font-size: 0.8rem;
+	color: #777;
+	cursor: pointer;
+	display: block;
+	text-align: center;
+	margin-top: 5px;
+	user-select: none;
+}
+
+.guest-expanded-details {
+	margin-top: 0.5rem;
+	padding: 0.75rem;
+	background-color: #f5f7fa;
+	border-radius: 6px;
+	border-left: 3px solid #ddd;
+	font-size: 0.9rem;
+}
+
+.computer-expanded-info {
+	margin-top: 0.5rem;
+	padding: 0.5rem;
+	background-color: rgba(108, 99, 255, 0.05);
+	border-radius: 4px;
+}
+
+.reset-status-btn {
+	background-color: #4caf50;
+	color: white;
+	border: none;
+	padding: 5px 10px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 0.8rem;
+	margin-top: 5px;
+	transition: background-color 0.3s;
+}
+
+.reset-status-btn:hover {
+	background-color: #45a049;
+}
+
+.guest-info {
+	flex: 1;
+	width: 100%;
+}
+
+.guest-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	cursor: pointer;
+	padding: 0.25rem 0;
+	border-bottom: 1px solid #eee;
+}
+
+/* Update to status indicators */
+.status-indicator {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	display: inline-block;
+	box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Enhanced statistics in the header */
+.guest-manager h3 {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1rem;
+	font-size: 1.1rem;
+	color: #444;
+	padding-bottom: 8px;
+	border-bottom: 1px solid #eee;
+}
