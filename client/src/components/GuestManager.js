@@ -19,19 +19,33 @@ const GuestManager = ({
 		return date.toLocaleString();
 	};
 
+	// Filter to show online guests first, then sort by isComputer
+	const sortedGuests = [...guests].sort((a, b) => {
+		// Online guests come first
+		if (a.status === "online" && b.status !== "online") return -1;
+		if (a.status !== "online" && b.status === "online") return 1;
+
+		// Then computers come before non-computers
+		if (a.isComputer && !b.isComputer) return -1;
+		if (!a.isComputer && b.isComputer) return 1;
+
+		// Then sort by hostname
+		return (a.hostname || "").localeCompare(b.hostname || "");
+	});
+
 	return (
 		<div className="guest-manager">
-			<h3>Connected Guests</h3>
+			<h3>Connected Guests {guests.length > 0 && `(${guests.length})`}</h3>
 			{guests.length === 0 ? (
-				<p>No guests connected</p>
+				<p className="no-guests">No guests connected</p>
 			) : (
 				<div className="guest-list">
-					{guests.map((guest) => (
+					{sortedGuests.map((guest) => (
 						<div
 							key={guest.guestId}
 							className={`guest-item ${getStatusClass(guest)} ${
 								selectedGuest === guest.guestId ? "selected" : ""
-							}`}
+							} ${guest.isComputer ? "is-computer" : ""}`}
 						>
 							<div
 								className="guest-info"
@@ -49,11 +63,16 @@ const GuestManager = ({
 									<p>OS: {guest.osInfo || "Unknown"}</p>
 									<p>Last Seen: {formatLastSeen(guest.lastSeen)}</p>
 									{guest.isComputer && (
-										<p
-											className={`computer-status status-${guest.computerStatus}`}
-										>
-											Computer Status: {guest.computerStatus || "unknown"}
-										</p>
+										<div className="computer-info">
+											<p
+												className={`computer-status status-${guest.computerStatus}`}
+											>
+												Computer Status: {guest.computerStatus || "unknown"}
+											</p>
+											{guest.computerName && (
+												<p>Computer Name: {guest.computerName}</p>
+											)}
+										</div>
 									)}
 								</div>
 							</div>

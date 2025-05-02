@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { io } from "socket.io-client";
 import axios from "../utils/axios";
 import { useNavigate } from "react-router-dom";
@@ -24,22 +24,37 @@ const Dashboard = () => {
 	const [isConnected, setIsConnected] = useState(false);
 	const [showUserMenu, setShowUserMenu] = useState(false);
 	const [activeTab, setActiveTab] = useState("guests"); // Add active tab state for admin view
+	const [loading, setLoading] = useState(true);
 	const { auth, logout } = useAuth();
 	const navigate = useNavigate();
 
-	useEffect(() => {
-		// Fetch initial list of guests
-		const fetchGuests = async () => {
-			try {
-				const response = await axios.get("/api/connected-guests");
-				if (response.data.guests) {
-					setGuests(response.data.guests);
-				}
-			} catch (error) {
-				console.error("Error fetching guests:", error);
+	// Define fetchGuests as a useCallback to avoid recreation on each render
+	const fetchGuests = useCallback(async () => {
+		try {
+			setLoading(true);
+			console.log("Fetching guests...");
+			const response = await axios.get("/api/connected-guests");
+			if (response.data.guests) {
+				console.log("Received guests:", response.data.guests.length);
+				setGuests(response.data.guests);
+			} else {
+				console.warn("No guests returned from API");
 			}
-		};
+			setLoading(false);
+		} catch (error) {
+			console.error("Error fetching guests:", error);
+			setLoading(false);
+		}
+	}, []);
 
+	// Force refresh function
+	const handleRefreshGuests = useCallback(() => {
+		console.log("Manually refreshing guests...");
+		fetchGuests();
+	}, [fetchGuests]);
+
+	useEffect(() => {
+		// Initial fetch of guests
 		fetchGuests();
 
 		// Socket.IO event handlers
@@ -73,8 +88,14 @@ const Dashboard = () => {
 			setCommandResults((prev) => [result, ...prev]);
 		});
 
+		// Respond to computerUpdate events by refreshing guests
+		socket.on("computerUpdate", () => {
+			console.log("Received computer update, refreshing guests...");
+			fetchGuests();
+		});
+
 		// Set up periodic refresh of guest list
-		const refreshInterval = setInterval(fetchGuests, 30000); // Refresh every 30 seconds
+		const refreshInterval = setInterval(fetchGuests, 15000); // Refresh every 15 seconds
 
 		// Cleanup on unmount
 		return () => {
@@ -82,9 +103,10 @@ const Dashboard = () => {
 			socket.off("disconnect");
 			socket.off("guestUpdate");
 			socket.off("commandUpdate");
+			socket.off("computerUpdate");
 			clearInterval(refreshInterval);
 		};
-	}, []);
+	}, [fetchGuests]);
 
 	const handleGuestSelect = (guestId) => {
 		setSelectedGuest(guestId);
@@ -116,6 +138,8 @@ const Dashboard = () => {
 				hourlyRate: 5, // Default hourly rate
 			});
 			alert(`Guest ${guestId} registered as computer successfully!`);
+			// Refresh guest list after registration
+			fetchGuests();
 		} catch (error) {
 			console.error("Error registering guest as computer:", error);
 			if (error.response?.data?.message?.includes("already exists")) {
@@ -225,12 +249,27 @@ const Dashboard = () => {
 						{activeTab === "guests" && (
 							<>
 								<div className="dashboard-sidebar">
-									<GuestManager
-										guests={guests}
-										selectedGuest={selectedGuest}
-										onSelectGuest={handleGuestSelect}
-										onRegisterAsComputer={handleRegisterAsComputer}
-									/>
+									{loading ? (
+										<div className="loading-spinner">Loading guests...</div>
+									) : (
+										<>
+											<div className="guest-header-actions">
+												<button
+													className="refresh-button"
+													onClick={handleRefreshGuests}
+													title="Refresh Guest List"
+												>
+													Refresh
+												</button>
+											</div>
+											<GuestManager
+												guests={guests}
+												selectedGuest={selectedGuest}
+												onSelectGuest={handleGuestSelect}
+												onRegisterAsComputer={handleRegisterAsComputer}
+											/>
+										</>
+									)}
 								</div>
 
 								<div className="dashboard-main">

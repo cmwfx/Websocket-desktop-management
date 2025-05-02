@@ -504,15 +504,22 @@ app.get("/api/connected-guests", async (req, res) => {
 		console.log("In-memory guest IDs:", inMemoryGuestIds);
 		console.log("Full in-memory guests:", guests);
 
-		// Get guests from database that are either online or were recently active
+		// Get guests from database that are either online, were recently active, or are registered as computers
 		const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+		// First get all registered computers to ensure they are included
+		const computers = await Computer.find({}).lean();
+		const computerGuestIds = computers.map((computer) => computer.guestId);
+
+		// Find all guests that match our criteria
 		const dbGuests = await Guest.find({
 			$or: [
 				{ status: "online" },
-				{ guestId: { $in: inMemoryGuestIds } },
+				{ guestId: { $in: [...inMemoryGuestIds, ...computerGuestIds] } },
 				{ lastSeen: { $gte: fiveMinutesAgo } },
 			],
 		}).lean();
+
 		console.log("Database guests:", JSON.stringify(dbGuests, null, 2));
 
 		// Update status of guests based on in-memory state
