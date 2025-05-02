@@ -32,19 +32,57 @@ const Dashboard = () => {
 		try {
 			setLoading(true);
 			console.log("Fetching guests and computers...");
-			const response = await axios.get("/api/connected-guests");
-			console.log("Guest API Response:", response);
-			if (response.data && response.data.guests) {
-				console.log("Received guests/computers:", response.data.guests.length);
-				setGuests(response.data.guests);
-			} else {
-				console.warn(
-					"No guests returned from API. Response data:",
-					response.data
-				);
-				// Initialize with empty array instead of leaving previous state
-				setGuests([]);
+
+			// First, get all connected guests
+			const guestResponse = await axios.get("/api/guests/connected");
+			console.log("Guest API Response:", guestResponse);
+
+			let guestList = [];
+			if (guestResponse.data && Array.isArray(guestResponse.data)) {
+				guestList = guestResponse.data;
+			} else if (guestResponse.data && guestResponse.data.guests) {
+				guestList = guestResponse.data.guests;
 			}
+
+			console.log("Received guests:", guestList.length);
+
+			// Next, get all computers
+			const computerResponse = await axios.get("/api/computers");
+			console.log("Computer API Response:", computerResponse);
+
+			let computerList = [];
+			if (computerResponse.data && Array.isArray(computerResponse.data)) {
+				computerList = computerResponse.data;
+				console.log("Received computers:", computerList.length);
+			}
+
+			// Merge computer information with guest list
+			const enhancedGuests = guestList.map((guest) => {
+				// Find a matching computer for this guest
+				const matchingComputer = computerList.find(
+					(comp) => comp.guestId === guest.guestId
+				);
+
+				if (matchingComputer) {
+					return {
+						...guest,
+						isComputer: true,
+						computerId: matchingComputer._id,
+						computerStatus: matchingComputer.status,
+						hourlyRate: matchingComputer.hourlyRate,
+						isRented: matchingComputer.isRented,
+						lastPasswordChange: matchingComputer.lastPasswordChange,
+					};
+				} else {
+					return {
+						...guest,
+						isComputer: false,
+					};
+				}
+			});
+
+			console.log("Enhanced guests with computer info:", enhancedGuests.length);
+			setGuests(enhancedGuests);
 			setLoading(false);
 		} catch (error) {
 			console.error("Error fetching guests:", error);
