@@ -31,11 +31,9 @@ const ComputerRental = () => {
 	const fetchComputers = useCallback(async () => {
 		try {
 			setLoading(true);
-			console.log("Fetching available computers...");
 
 			// Get all computers first
 			const allComputersResponse = await axios.get("/api/computers");
-			console.log("All computers response:", allComputersResponse);
 
 			let computerList = [];
 			if (
@@ -43,7 +41,6 @@ const ComputerRental = () => {
 				Array.isArray(allComputersResponse.data)
 			) {
 				computerList = allComputersResponse.data;
-				console.log("Total computers:", computerList.length);
 
 				// Filter for available computers (isRegistered, !isRented, status=available)
 				const availableComputers = computerList.filter(
@@ -51,10 +48,8 @@ const ComputerRental = () => {
 						comp.isRegistered && !comp.isRented && comp.status === "available"
 				);
 
-				console.log("Available computers:", availableComputers.length);
 				setComputers(availableComputers);
 			} else {
-				console.warn("No computers returned from API");
 				setComputers([]);
 			}
 
@@ -71,14 +66,12 @@ const ComputerRental = () => {
 	const fetchRentals = useCallback(async () => {
 		try {
 			const response = await axios.get("/api/rentals/my-rentals");
-			console.log("My rentals response:", response);
 
 			// Ensure response.data is an array before filtering
 			if (Array.isArray(response.data)) {
 				const active = response.data.filter(
 					(rental) => rental.status === "active"
 				);
-				console.log("Active rentals:", active.length);
 				setActiveRentals(active);
 			} else {
 				console.error("Expected array but got:", response.data);
@@ -98,7 +91,6 @@ const ComputerRental = () => {
 		// Socket.IO event handlers
 		socket.on("connect", () => {
 			setIsConnected(true);
-			console.log("Connected to server");
 			// Refresh data when reconnected
 			fetchComputers();
 			fetchRentals();
@@ -106,18 +98,15 @@ const ComputerRental = () => {
 
 		socket.on("disconnect", () => {
 			setIsConnected(false);
-			console.log("Disconnected from server");
 		});
 
 		// Listen for computer updates
 		socket.on("computerUpdate", () => {
-			console.log("Received computer update, refreshing computers...");
 			fetchComputers();
 		});
 
 		// Listen for rental updates
 		socket.on("rentalUpdate", () => {
-			console.log("Received rental update, refreshing rentals...");
 			fetchRentals();
 		});
 

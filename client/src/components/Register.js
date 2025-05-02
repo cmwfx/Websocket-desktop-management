@@ -37,15 +37,12 @@ const Register = () => {
 		}
 
 		try {
-			console.log("Submitting registration form...");
 			const result = await register({
 				username,
 				password,
 				email,
 				fullName,
 			});
-
-			console.log("Registration result:", result);
 
 			if (result.success) {
 				if (result.warning) {

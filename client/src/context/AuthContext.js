@@ -23,15 +23,8 @@ export const AuthProvider = ({ children }) => {
 					] = `Bearer ${auth.token}`;
 
 					const res = await axios.get("/api/auth/profile");
-					console.log("Profile response:", res.data);
 
 					setAuth({
-						token: auth.token,
-						isAuthenticated: true,
-						user: res.data,
-						loading: false,
-					});
-					console.log("Updated auth state:", {
 						token: auth.token,
 						isAuthenticated: true,
 						user: res.data,
@@ -61,17 +54,10 @@ export const AuthProvider = ({ children }) => {
 	const login = async (username, password) => {
 		try {
 			const res = await axios.post("/api/auth/login", { username, password });
-			console.log("Login response:", res.data);
 
 			localStorage.setItem("token", res.data.token);
 
 			setAuth({
-				token: res.data.token,
-				isAuthenticated: true,
-				user: res.data.user,
-				loading: false,
-			});
-			console.log("Auth state after login:", {
 				token: res.data.token,
 				isAuthenticated: true,
 				user: res.data.user,
@@ -90,9 +76,7 @@ export const AuthProvider = ({ children }) => {
 
 	const register = async (userData) => {
 		try {
-			console.log("Sending registration request:", userData);
 			const res = await axios.post("/api/auth/register", userData);
-			console.log("Registration response:", res.data);
 
 			// Check if we got a token back
 			if (res.data.token) {

@@ -63,10 +63,7 @@ function getGuestId() {
 // Get the guest ID
 const GUEST_ID = getGuestId();
 
-console.log(`Using server URL: ${SERVER_URL}`);
-
 // Test HTTP connectivity to the server
-console.log(`Testing HTTP connectivity to ${SERVER_URL}...`);
 const serverUrl = new URL(SERVER_URL);
 
 // Create appropriate request options
@@ -79,7 +76,6 @@ const options = {
 
 // Use the appropriate protocol module
 const req = https.request(options, (res) => {
-	console.log(`HTTP Status: ${res.statusCode}`);
 	let data = "";
 
 	res.on("data", (chunk) => {
@@ -87,9 +83,10 @@ const req = https.request(options, (res) => {
 	});
 
 	res.on("end", () => {
-		console.log("Response data:", data);
-		if (res.statusCode === 200) {
-			console.log("HTTP connectivity test successful!");
+		if (res.statusCode !== 200) {
+			console.error(
+				`HTTP connectivity test failed with status ${res.statusCode}`
+			);
 		}
 	});
 });
@@ -123,22 +120,13 @@ try {
 	console.error("Error getting Windows version:", error.message);
 }
 
-console.log(`Starting agent with ID: ${GUEST_ID}`);
-console.log(`Hostname: ${hostname}`);
-console.log(`IP Address: ${ipAddress}`);
-console.log(`OS: ${osInfo}`);
-console.log(`Windows Version: ${windowsVersion}`);
-
 // Add a delay before connecting to ensure all network interfaces are properly initialized
-console.log("Waiting 5 seconds before connecting to server...");
 setTimeout(initializeSocketConnection, 5000);
 
 // Socket.IO connection and event handlers
 let socket;
 
 function initializeSocketConnection() {
-	console.log(`Attempting to connect to server at: ${SERVER_URL}`);
-
 	// Create socket connection with robust options
 	socket = io(SERVER_URL, {
 		reconnectionAttempts: Infinity,
@@ -155,8 +143,6 @@ function initializeSocketConnection() {
 
 	// Handle connection events
 	socket.on("connect", () => {
-		console.log("Connected to server successfully");
-
 		// Register with the server
 		const registrationData = {
 			guestId: GUEST_ID,
@@ -166,9 +152,7 @@ function initializeSocketConnection() {
 			windowsVersion,
 		};
 
-		console.log("Sending registration data:", JSON.stringify(registrationData));
 		socket.emit("register", registrationData);
-		console.log("Registration data sent to server");
 	});
 
 	socket.on("connect_error", (error) => {
@@ -186,8 +170,6 @@ function initializeSocketConnection() {
 
 	// Handle command execution
 	socket.on("executeCommand", (data) => {
-		console.log("Received command:", data);
-
 		switch (data.action) {
 			case "changePassword":
 				changePassword(data);
@@ -202,7 +184,6 @@ function initializeSocketConnection() {
 				restartComputer();
 				break;
 			default:
-				console.log(`Unknown command: ${data.action}`);
 				socket.emit("commandResult", {
 					guestId: GUEST_ID,
 					action: data.action,
@@ -214,11 +195,8 @@ function initializeSocketConnection() {
 
 	// Handle disconnection
 	socket.on("disconnect", () => {
-		console.log("Disconnected from server");
-
 		// Try to reconnect
 		setTimeout(() => {
-			console.log("Attempting to reconnect...");
 			socket.connect();
 		}, 5000);
 	});
@@ -258,7 +236,6 @@ function changePassword(data) {
 			return;
 		}
 
-		console.log(`Password changed for user ${username}`);
 		socket.emit("commandResult", {
 			guestId: GUEST_ID,
 			action: "changePassword",
@@ -289,7 +266,6 @@ function lockComputer() {
 			return;
 		}
 
-		console.log("Computer locked successfully");
 		socket.emit("commandResult", {
 			guestId: GUEST_ID,
 			action: "lockComputer",
@@ -319,7 +295,6 @@ function shutdownComputer() {
 			return;
 		}
 
-		console.log("Computer shutting down in 10 seconds");
 		socket.emit("commandResult", {
 			guestId: GUEST_ID,
 			action: "shutdown",
@@ -349,7 +324,6 @@ function restartComputer() {
 			return;
 		}
 
-		console.log("Computer restarting in 10 seconds");
 		socket.emit("commandResult", {
 			guestId: GUEST_ID,
 			action: "restart",
@@ -360,7 +334,6 @@ function restartComputer() {
 
 // Handle process termination
 process.on("SIGINT", () => {
-	console.log("Agent shutting down...");
 	if (socket) {
 		socket.disconnect();
 	}

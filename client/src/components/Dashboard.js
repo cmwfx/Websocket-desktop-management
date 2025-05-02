@@ -31,11 +31,9 @@ const Dashboard = () => {
 	const fetchGuests = useCallback(async () => {
 		try {
 			setLoading(true);
-			console.log("Fetching guests and computers...");
 
 			// First, get all connected guests
 			const guestResponse = await axios.get("/api/guests/connected");
-			console.log("Guest API Response:", guestResponse);
 
 			let guestList = [];
 			if (guestResponse.data && Array.isArray(guestResponse.data)) {
@@ -44,16 +42,12 @@ const Dashboard = () => {
 				guestList = guestResponse.data.guests;
 			}
 
-			console.log("Received guests:", guestList.length);
-
 			// Next, get all computers
 			const computerResponse = await axios.get("/api/computers");
-			console.log("Computer API Response:", computerResponse);
 
 			let computerList = [];
 			if (computerResponse.data && Array.isArray(computerResponse.data)) {
 				computerList = computerResponse.data;
-				console.log("Received computers:", computerList.length);
 			}
 
 			// Merge computer information with guest list
@@ -81,7 +75,6 @@ const Dashboard = () => {
 				}
 			});
 
-			console.log("Enhanced guests with computer info:", enhancedGuests.length);
 			setGuests(enhancedGuests);
 			setLoading(false);
 		} catch (error) {
@@ -94,7 +87,6 @@ const Dashboard = () => {
 
 	// Force refresh function
 	const handleRefreshGuests = useCallback(() => {
-		console.log("Manually refreshing guests and computers...");
 		fetchGuests();
 	}, [fetchGuests]);
 
@@ -105,14 +97,12 @@ const Dashboard = () => {
 		// Socket.IO event handlers
 		socket.on("connect", () => {
 			setIsConnected(true);
-			console.log("Connected to server");
 			// Refresh guest list when reconnected
 			fetchGuests();
 		});
 
 		socket.on("disconnect", () => {
 			setIsConnected(false);
-			console.log("Disconnected from server");
 			// Mark all guests as potentially offline when disconnected
 			setGuests((prevGuests) =>
 				prevGuests.map((guest) => ({
@@ -123,7 +113,6 @@ const Dashboard = () => {
 		});
 
 		socket.on("guestUpdate", (updatedGuests) => {
-			console.log("Received guest update:", updatedGuests);
 			if (Array.isArray(updatedGuests)) {
 				setGuests(updatedGuests);
 			}
@@ -135,7 +124,6 @@ const Dashboard = () => {
 
 		// Respond to computerUpdate events by refreshing guests
 		socket.on("computerUpdate", () => {
-			console.log("Received computer update, refreshing guests...");
 			fetchGuests();
 		});
 
@@ -210,15 +198,9 @@ const Dashboard = () => {
 
 	// Determine if user is admin
 	const isAdmin = auth?.user?.role === "admin";
-	console.log("Auth state in Dashboard:", auth); // Debug log
-	console.log("Is admin?", isAdmin, "Role:", auth?.user?.role); // Debug log
 
 	// If auth is still loading or user is not available, show loading state
 	if (auth?.loading || !auth?.user) {
-		console.log("Dashboard loading state:", {
-			loading: auth?.loading,
-			user: auth?.user,
-		}); // Debug log
 		return <div className="loading">Loading dashboard...</div>;
 	}
 

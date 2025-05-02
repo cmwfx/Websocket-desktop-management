@@ -7,7 +7,6 @@ const { authMiddleware, adminMiddleware } = require("../middleware/auth");
 // Register a new user
 router.post("/register", async (req, res) => {
 	try {
-		console.log("Registration request received:", req.body);
 		const { username, password, email, fullName } = req.body;
 
 		// Check if user already exists
@@ -27,20 +26,14 @@ router.post("/register", async (req, res) => {
 		});
 
 		await user.save();
-		console.log("User saved successfully:", user._id);
 
 		// Generate JWT token
-		console.log(
-			"Generating JWT token with secret:",
-			process.env.JWT_SECRET ? "Secret exists" : "Secret missing"
-		);
 		try {
 			const token = jwt.sign(
 				{ id: user._id, username: user.username, role: user.role },
 				process.env.JWT_SECRET || "fallback_secret_for_development",
 				{ expiresIn: "24h" }
 			);
-			console.log("JWT token generated successfully");
 
 			// Return user info and token (excluding password)
 			const userResponse = {
@@ -52,7 +45,6 @@ router.post("/register", async (req, res) => {
 				credits: user.credits,
 			};
 
-			console.log("Sending successful response");
 			return res.status(201).json({ user: userResponse, token });
 		} catch (jwtError) {
 			console.error("JWT Error:", jwtError);
@@ -141,9 +133,6 @@ router.get("/profile", authMiddleware, async (req, res) => {
 router.post("/create-admin", async (req, res) => {
 	try {
 		const { username, password, adminSecret } = req.body;
-
-		console.log("Received admin secret:", adminSecret);
-		console.log("Expected admin secret from env:", process.env.ADMIN_SECRET);
 
 		// Make sure the admin secret is loaded
 		if (!process.env.ADMIN_SECRET) {
