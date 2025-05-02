@@ -1,7 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "../utils/axios";
 import { useAuth } from "../context/AuthContext";
 import "../styles/rental.css";
+import { io } from "socket.io-client";
+
+// Use relative URLs in production:
+const BACKEND_URL =
+	process.env.NODE_ENV === "production"
+		? ""
+		: process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+const socket = process.env.NODE_ENV === "production" ? io() : io(BACKEND_URL);
 
 const ComputerRental = () => {
 	const [computers, setComputers] = useState([]);
@@ -13,55 +21,121 @@ const ComputerRental = () => {
 	const [rentalModalOpen, setRentalModalOpen] = useState(false);
 	const [confirmCancelModalOpen, setConfirmCancelModalOpen] = useState(false);
 	const [rentalToCancel, setRentalToCancel] = useState(null);
+	const [isConnected, setIsConnected] = useState(false);
 	const { auth } = useAuth();
 
 	// Check if auth is available
 	const userCredits = auth?.user?.credits || 0;
 
+	// Improved fetchComputers function using useCallback
+	const fetchComputers = useCallback(async () => {
+		try {
+			setLoading(true);
+			console.log("Fetching available computers...");
+
+			// Get all computers first
+			const allComputersResponse = await axios.get("/api/computers");
+			console.log("All computers response:", allComputersResponse);
+
+			let computerList = [];
+			if (
+				allComputersResponse.data &&
+				Array.isArray(allComputersResponse.data)
+			) {
+				computerList = allComputersResponse.data;
+				console.log("Total computers:", computerList.length);
+
+				// Filter for available computers (isRegistered, !isRented, status=available)
+				const availableComputers = computerList.filter(
+					(comp) =>
+						comp.isRegistered && !comp.isRented && comp.status === "available"
+				);
+
+				console.log("Available computers:", availableComputers.length);
+				setComputers(availableComputers);
+			} else {
+				console.warn("No computers returned from API");
+				setComputers([]);
+			}
+
+			setLoading(false);
+		} catch (err) {
+			console.error("Error fetching computers:", err);
+			setError("Failed to load available computers");
+			setLoading(false);
+			setComputers([]);
+		}
+	}, []);
+
+	// Fetch user's active rentals
+	const fetchRentals = useCallback(async () => {
+		try {
+			const response = await axios.get("/api/rentals/my-rentals");
+			console.log("My rentals response:", response);
+
+			// Ensure response.data is an array before filtering
+			if (Array.isArray(response.data)) {
+				const active = response.data.filter(
+					(rental) => rental.status === "active"
+				);
+				console.log("Active rentals:", active.length);
+				setActiveRentals(active);
+			} else {
+				console.error("Expected array but got:", response.data);
+				setActiveRentals([]);
+			}
+		} catch (err) {
+			console.error("Error fetching rentals:", err);
+			setActiveRentals([]);
+		}
+	}, []);
+
 	useEffect(() => {
-		// Fetch available computers
-		const fetchComputers = async () => {
-			try {
-				setLoading(true);
-				const response = await axios.get("/api/computers/available");
-				setComputers(response.data);
-				setLoading(false);
-			} catch (err) {
-				console.error("Error fetching computers:", err);
-				setError("Failed to load available computers");
-				setLoading(false);
-			}
-		};
-
-		// Fetch user's active rentals
-		const fetchRentals = async () => {
-			try {
-				const response = await axios.get("/api/rentals/my-rentals");
-				// Ensure response.data is an array before filtering
-				if (Array.isArray(response.data)) {
-					setActiveRentals(
-						response.data.filter((rental) => rental.status === "active")
-					);
-				} else {
-					console.error("Expected array but got:", response.data);
-					setActiveRentals([]);
-				}
-			} catch (err) {
-				console.error("Error fetching rentals:", err);
-			}
-		};
-
+		// Initial fetch
 		fetchComputers();
 		fetchRentals();
 
-		// Set up polling for updates
-		const interval = setInterval(() => {
+		// Socket.IO event handlers
+		socket.on("connect", () => {
+			setIsConnected(true);
+			console.log("Connected to server");
+			// Refresh data when reconnected
 			fetchComputers();
 			fetchRentals();
-		}, 30000); // Every 30 seconds
+		});
 
-		return () => clearInterval(interval);
-	}, []);
+		socket.on("disconnect", () => {
+			setIsConnected(false);
+			console.log("Disconnected from server");
+		});
+
+		// Listen for computer updates
+		socket.on("computerUpdate", () => {
+			console.log("Received computer update, refreshing computers...");
+			fetchComputers();
+		});
+
+		// Listen for rental updates
+		socket.on("rentalUpdate", () => {
+			console.log("Received rental update, refreshing rentals...");
+			fetchRentals();
+		});
+
+		// Set up periodic refresh
+		const refreshInterval = setInterval(() => {
+			fetchComputers();
+			fetchRentals();
+		}, 15000); // Refresh every 15 seconds
+
+		// Cleanup on unmount
+		return () => {
+			socket.off("connect");
+			socket.off("disconnect");
+			socket.off("computerUpdate");
+			socket.off("rentalUpdate");
+			clearInterval(refreshInterval);
+		};
+	}, [fetchComputers, fetchRentals]);
 
 	const openRentalModal = (computer) => {
 		setSelectedComputer(computer);
@@ -92,14 +166,12 @@ const ComputerRental = () => {
 				duration: rentalDuration,
 			});
 
-			// Add the new rental to the active rentals
-			setActiveRentals([...activeRentals, response.data]);
-
-			// Remove the rented computer from available computers
-			setComputers(computers.filter((c) => c._id !== selectedComputer._id));
-
-			// Close the modal
+			// Close the modal first
 			closeRentalModal();
+
+			// Refresh rentals and computers lists
+			fetchRentals();
+			fetchComputers();
 
 			// Show success message
 			alert(
@@ -123,17 +195,12 @@ const ComputerRental = () => {
 		try {
 			await axios.post(`/api/rentals/${rentalToCancel}/cancel`);
 
-			// Remove the cancelled rental from active rentals
-			setActiveRentals(
-				activeRentals.filter((rental) => rental._id !== rentalToCancel)
-			);
-
-			// Refresh available computers
-			const response = await axios.get("/api/computers/available");
-			setComputers(response.data);
-
-			// Close the confirmation modal
+			// Close the confirmation modal first
 			closeCancelConfirmModal();
+
+			// Refresh rentals and computers lists
+			fetchRentals();
+			fetchComputers();
 
 			alert("Rental cancelled successfully");
 		} catch (err) {
@@ -176,6 +243,27 @@ const ComputerRental = () => {
 
 	return (
 		<div className="computer-rental">
+			<div className="connection-status-container">
+				<div className="connection-status-indicator">
+					Status:{" "}
+					<span className={isConnected ? "connected" : "disconnected"}>
+						{isConnected ? "Connected" : "Disconnected"}
+					</span>
+				</div>
+
+				<button
+					className="refresh-button"
+					onClick={() => {
+						console.log("Manually refreshing computers and rentals...");
+						fetchComputers();
+						fetchRentals();
+					}}
+					title="Refresh Computers and Rentals"
+				>
+					Refresh
+				</button>
+			</div>
+
 			<div className="rental-section">
 				<h2>My Active Rentals</h2>
 				{activeRentals.length === 0 ? (
