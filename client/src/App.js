@@ -13,33 +13,36 @@ import Register from "./components/Register";
 import AdminRegister from "./components/AdminRegister";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
+import { SocketProvider } from "./contexts/SocketContext";
 
 function App() {
 	return (
 		<AuthProvider>
-			<Router>
-				<div className="App">
-					<Routes>
-						{/* Public routes */}
-						<Route path="/login" element={<Login />} />
-						<Route path="/register" element={<Register />} />
-						<Route path="/admin-register" element={<AdminRegister />} />
+			<SocketProvider>
+				<Router>
+					<div className="App">
+						<Routes>
+							{/* Public routes */}
+							<Route path="/login" element={<Login />} />
+							<Route path="/register" element={<Register />} />
+							<Route path="/admin-register" element={<AdminRegister />} />
 
-						{/* Protected routes */}
-						<Route
-							path="/dashboard"
-							element={
-								<ProtectedRoute>
-									<Dashboard />
-								</ProtectedRoute>
-							}
-						/>
+							{/* Protected routes */}
+							<Route
+								path="/dashboard"
+								element={
+									<ProtectedRoute>
+										<Dashboard />
+									</ProtectedRoute>
+								}
+							/>
 
-						{/* Redirect root to login or dashboard based on auth */}
-						<Route path="/" element={<Navigate to="/login" replace />} />
-					</Routes>
-				</div>
-			</Router>
+							{/* Redirect root to login or dashboard based on auth */}
+							<Route path="/" element={<Navigate to="/login" replace />} />
+						</Routes>
+					</div>
+				</Router>
+			</SocketProvider>
 		</AuthProvider>
 	);
 }

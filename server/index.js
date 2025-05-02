@@ -6,6 +6,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const path = require("path");
 const { ServerApiVersion } = require("mongodb");
+const { v4: uuidv4 } = require("uuid");
 
 // Import routes
 const guestRoutes = require("./routes/guests");
@@ -184,127 +185,221 @@ async function getFullGuestList() {
 	}
 }
 
-// Socket.IO connection handling
+// Socket.IO connection handler
 io.on("connection", (socket) => {
 	console.log("New client connected:", socket.id);
 
 	// Handle guest registration
-	socket.on("register", async (data) => {
-		const {
-			guestId,
-			hostname,
-			ipAddress,
-			osInfo,
-			windowsVersion,
-			desktopEnvironment,
-		} = data;
-
-		console.log(
-			`Guest registration received for IP: ${ipAddress}`,
-			JSON.stringify(data, null, 2)
-		);
+	socket.on("registerGuest", async (guestData) => {
+		console.log("Registering guest:", guestData);
+		const guestId = guestData.guestId || uuidv4();
 
 		try {
-			// Look for existing guest with this IP
-			let guest = await Guest.findOne({ ipAddress });
-			let existingGuestId = null;
+			// Store socket ID for this guest
+			guests[guestId] = {
+				...guestData,
+				socketId: socket.id,
+				connected: true,
+				status: "online",
+			};
 
+			// Associate socket with guestId for later reference
+			socket.guestId = guestId;
+
+			// Save or update guest in database
+			let guest = await Guest.findOne({ guestId });
 			if (guest) {
 				// Update existing guest
-				existingGuestId = guest.guestId;
-				console.log(`Found existing guest with IP ${ipAddress}, updating...`);
-
-				guest.hostname = hostname || guest.hostname;
-				guest.osInfo = osInfo || guest.osInfo;
-				guest.windowsVersion = windowsVersion || guest.windowsVersion;
-				guest.desktopEnvironment =
-					desktopEnvironment || guest.desktopEnvironment;
 				guest.status = "online";
+				guest.hostname = guestData.hostname || guest.hostname;
+				guest.ipAddress = guestData.ipAddress || guest.ipAddress;
+				guest.osInfo = guestData.osInfo || guest.osInfo;
+				guest.windowsVersion = guestData.windowsVersion || guest.windowsVersion;
+				guest.desktopEnvironment =
+					guestData.desktopEnvironment || guest.desktopEnvironment;
 				guest.lastSeen = new Date();
-
 				await guest.save();
-				console.log(`Updated existing guest: ${guest.guestId}`);
 
-				// Update computer status if this guest is registered as a computer
-				const computer = await Computer.findOne({ guestId: guest.guestId });
+				console.log(`Updated existing guest in database: ${guestId}`);
+
+				// Check if this guest is registered as a computer
+				const computer = await Computer.findOne({ guestId });
 				if (computer) {
-					computer.status = "available";
-					await computer.save();
-					io.emit("computerUpdate", {
-						computerId: computer._id,
-						status: "available",
-					});
+					console.log(
+						`Guest ${guestId} is a registered computer (${computer.computerName})`
+					);
+					// Update computer status if needed
+					if (computer.status !== "available") {
+						computer.status = "available";
+						await computer.save();
+						console.log(
+							`Updated computer status to available: ${computer.computerName}`
+						);
+						// Emit computer update to all clients
+						io.emit("computerUpdated", { computer });
+					}
 				}
 			} else {
 				// Create new guest
-				console.log(
-					`No existing guest found for IP ${ipAddress}, creating new...`
-				);
 				guest = new Guest({
 					guestId,
-					hostname,
-					ipAddress,
-					osInfo,
-					windowsVersion,
-					desktopEnvironment,
 					status: "online",
+					hostname: guestData.hostname,
+					ipAddress: guestData.ipAddress,
+					osInfo: guestData.osInfo,
+					windowsVersion: guestData.windowsVersion,
+					desktopEnvironment: guestData.desktopEnvironment,
 					lastSeen: new Date(),
 				});
-
 				await guest.save();
-				console.log(`Created new guest: ${guest.guestId}`);
+				console.log(`Created new guest in database: ${guestId}`);
 			}
 
-			// Store socket connection with guest details
-			guests[guest.guestId] = {
-				id: socket.id,
-				hostname,
-				ipAddress,
-				osInfo,
-				windowsVersion,
-				desktopEnvironment,
-				registeredAt: new Date(),
-				lastSeen: new Date(),
-				status: "online",
-			};
+			// Send confirmation to the client with the guestId
+			socket.emit("guestRegistered", { guestId });
 
-			// If this was an existing guest with a different ID, clean up old reference
-			if (existingGuestId && existingGuestId !== guest.guestId) {
-				delete guests[existingGuestId];
+			// Broadcast to all clients that a guest connected
+			io.emit("guestConnected", { guestId, hostname: guestData.hostname });
 
-				// Also update any computer references
-				const computer = await Computer.findOne({ guestId: existingGuestId });
-				if (computer) {
-					computer.guestId = guest.guestId;
-					await computer.save();
-				}
-			}
+			console.log(`Guest registered successfully: ${guestId}`);
 
-			// Update the app's guests registry
-			app.set("guests", guests);
-
-			console.log(`Updated in-memory guests registry`);
-
-			// Get and emit the full guest list
-			const guestList = await getFullGuestList();
-			io.emit("guestUpdate", guestList);
+			// Update client dashboards with new guest list
+			updateGuestList();
 		} catch (error) {
-			console.error("Error handling guest registration:", error);
-			// Even if DB operations fail, maintain socket connection in memory
-			guests[guestId] = {
-				id: socket.id,
-				hostname,
-				ipAddress,
-				osInfo,
-				windowsVersion,
-				desktopEnvironment,
-				registeredAt: new Date(),
-				lastSeen: new Date(),
-				status: "online",
-			};
-			app.set("guests", guests);
+			console.error("Error registering guest:", error);
+			socket.emit("error", { message: "Error registering guest" });
 		}
 	});
+
+	// Handle disconnect
+	socket.on("disconnect", async () => {
+		console.log("Client disconnected:", socket.id);
+		const guestId = socket.guestId;
+
+		if (guestId && guests[guestId]) {
+			console.log(`Guest disconnected: ${guestId}`);
+			// Remove guest from in-memory store
+			delete guests[guestId];
+
+			try {
+				// Update database status
+				const guest = await Guest.findOne({ guestId });
+				if (guest) {
+					guest.status = "offline";
+					guest.lastSeen = new Date();
+					await guest.save();
+					console.log(`Updated guest status to offline: ${guestId}`);
+				}
+
+				// Check if this guest is a computer
+				const computer = await Computer.findOne({ guestId });
+				if (computer && computer.status === "available") {
+					console.log(`Computer guest disconnected: ${guestId}`);
+					// Only update status if it's currently available (not being used)
+					computer.status = "offline";
+					await computer.save();
+					console.log(
+						`Updated computer status to offline: ${computer.computerName}`
+					);
+					// Emit computer update
+					io.emit("computerUpdated", { computer });
+				}
+
+				// Broadcast to all clients that a guest disconnected
+				io.emit("guestDisconnected", { guestId });
+
+				// Update client dashboards with new guest list
+				updateGuestList();
+			} catch (error) {
+				console.error("Error updating guest status on disconnect:", error);
+			}
+		}
+	});
+
+	// Function to update all clients with the latest guest list
+	async function updateGuestList() {
+		try {
+			// Get in-memory guests with full details
+			const inMemoryGuestIds = Object.keys(guests);
+
+			// Get all registered computers
+			const computers = await Computer.find({}).lean();
+			const computerGuestIds = computers.map((computer) => computer.guestId);
+
+			// Get guests from database that match our criteria
+			const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+			const dbGuests = await Guest.find({
+				$or: [
+					{ status: "online" },
+					{ guestId: { $in: [...inMemoryGuestIds, ...computerGuestIds] } },
+					{ lastSeen: { $gte: fiveMinutesAgo } },
+				],
+			}).lean();
+
+			// Process guest list as in the API endpoint
+			const guestMap = {};
+
+			// Add database guests to the map
+			dbGuests.forEach((guest) => {
+				const isConnected = inMemoryGuestIds.includes(guest.guestId);
+				const inMemoryData = guests[guest.guestId] || {};
+				guestMap[guest.guestId] = {
+					...guest,
+					...inMemoryData,
+					status: isConnected ? "online" : "offline",
+					lastSeen: isConnected ? new Date() : guest.lastSeen,
+				};
+			});
+
+			// Add in-memory guests not in DB
+			inMemoryGuestIds
+				.filter((id) => !guestMap[id])
+				.forEach((id) => {
+					guestMap[id] = {
+						guestId: id,
+						status: "online",
+						lastSeen: new Date(),
+						hostname: guests[id].hostname || "Unknown",
+						ipAddress: guests[id].ipAddress || "Unknown",
+						osInfo: guests[id].osInfo || "Unknown",
+						windowsVersion: guests[id].windowsVersion || "Unknown",
+						desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
+					};
+				});
+
+			// Add computer information
+			computers.forEach((computer) => {
+				if (!guestMap[computer.guestId]) {
+					// Create a minimal guest entry for computers without Guest records
+					guestMap[computer.guestId] = {
+						guestId: computer.guestId,
+						hostname: computer.computerName || "Unknown",
+						status: "offline",
+						lastSeen: computer.updatedAt || new Date(),
+						ipAddress: "Unknown",
+						osInfo: "Unknown",
+						windowsVersion: "Unknown",
+						desktopEnvironment: "Unknown",
+					};
+				}
+
+				// Add computer information directly to the guest object
+				guestMap[computer.guestId].isComputer = true;
+				guestMap[computer.guestId].computerStatus = computer.status;
+				guestMap[computer.guestId].computerId = computer._id;
+				guestMap[computer.guestId].computerName = computer.computerName;
+				guestMap[computer.guestId].hourlyRate = computer.hourlyRate;
+			});
+
+			// Convert map to array
+			const guestsWithComputerInfo = Object.values(guestMap);
+
+			// Emit updated guest list to all clients
+			io.emit("guestUpdated", { guests: guestsWithComputerInfo });
+		} catch (error) {
+			console.error("Error updating guest list:", error);
+		}
+	}
 
 	// Handle command results from guests
 	socket.on("commandResult", async (result) => {
@@ -394,57 +489,6 @@ io.on("connection", (socket) => {
 			}
 		}, null);
 	});
-
-	// Handle disconnection
-	socket.on("disconnect", async () => {
-		// Find and remove the disconnected guest
-		for (const [id, s] of Object.entries(guests)) {
-			if (s.id === socket.id) {
-				delete guests[id];
-				console.log(`Guest ${id} disconnected from socket`);
-
-				// Update the app's guests registry
-				app.set("guests", guests);
-
-				// Update guest status in database
-				await safeDbOperation(async () => {
-					console.log(`Looking for disconnected guest in database: ${id}`);
-					const guest = await Guest.findOne({ guestId: id });
-
-					if (guest) {
-						console.log(`Found disconnected guest in database: ${id}`);
-						guest.status = "offline";
-						guest.lastSeen = new Date();
-
-						const savedGuest = await guest.save();
-						console.log(
-							`Updated guest status to offline in database: ${id}`,
-							JSON.stringify(savedGuest.toObject(), null, 2)
-						);
-
-						// Update computer status if this guest is registered as a computer
-						const computer = await Computer.findOne({ guestId: id });
-						if (computer && !computer.isRented) {
-							// Only update status if not rented
-							computer.status = "offline";
-							await computer.save();
-							io.emit("computerUpdate", {
-								computerId: computer._id,
-								status: "offline",
-							});
-						}
-
-						// Get and emit the full guest list
-						const guestList = await getFullGuestList();
-						io.emit("guestUpdate", guestList);
-					} else {
-						console.log(`Guest ${id} not found in database`);
-					}
-				}, null);
-				break;
-			}
-		}
-	});
 });
 
 // API endpoint to send commands to guests
@@ -504,12 +548,13 @@ app.get("/api/connected-guests", async (req, res) => {
 		console.log("In-memory guest IDs:", inMemoryGuestIds);
 		console.log("Full in-memory guests:", guests);
 
-		// Get guests from database that are either online, were recently active, or are registered as computers
-		const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-
 		// First get all registered computers to ensure they are included
 		const computers = await Computer.find({}).lean();
+		console.log(`Found ${computers.length} computers in database`);
 		const computerGuestIds = computers.map((computer) => computer.guestId);
+
+		// Get guests from database that are either online, were recently active, or are registered as computers
+		const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
 		// Find all guests that match our criteria
 		const dbGuests = await Guest.find({
@@ -549,23 +594,45 @@ app.get("/api/connected-guests", async (req, res) => {
 				desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
 			}));
 
-		// Combine all guests
-		const allGuests = [...updatedGuests, ...newGuests];
+		// Create a map of all guests for easier lookup
+		const guestMap = {};
 
-		// Fetch computer information for each guest
-		const guestsWithComputerInfo = await Promise.all(
-			allGuests.map(async (guest) => {
-				const computer = await Computer.findOne({
-					guestId: guest.guestId,
-				}).lean();
-				return {
-					...guest,
-					isComputer: !!computer,
-					computerStatus: computer ? computer.status : null,
-					computerId: computer ? computer._id : null,
+		// Add database guests to the map
+		updatedGuests.forEach((guest) => {
+			guestMap[guest.guestId] = guest;
+		});
+
+		// Add in-memory guests not in DB to the map
+		newGuests.forEach((guest) => {
+			guestMap[guest.guestId] = guest;
+		});
+
+		// Ensure all computers have an entry, even if there's no Guest record
+		computers.forEach((computer) => {
+			if (!guestMap[computer.guestId]) {
+				// Create a minimal guest entry for computers without Guest records
+				guestMap[computer.guestId] = {
+					guestId: computer.guestId,
+					hostname: computer.computerName || "Unknown",
+					status: "offline",
+					lastSeen: computer.updatedAt || new Date(),
+					ipAddress: "Unknown",
+					osInfo: "Unknown",
+					windowsVersion: "Unknown",
+					desktopEnvironment: "Unknown",
 				};
-			})
-		);
+			}
+
+			// Add computer information directly to the guest object
+			guestMap[computer.guestId].isComputer = true;
+			guestMap[computer.guestId].computerStatus = computer.status;
+			guestMap[computer.guestId].computerId = computer._id;
+			guestMap[computer.guestId].computerName = computer.computerName;
+			guestMap[computer.guestId].hourlyRate = computer.hourlyRate;
+		});
+
+		// Convert map to array
+		const guestsWithComputerInfo = Object.values(guestMap);
 
 		console.log(
 			"Final guest list:",
