@@ -29,10 +29,14 @@ router.get("/available", async (req, res) => {
 			status: "available",
 		}).populate("guestInfo");
 
-		// Filter out computers whose guests are offline
-		const availableComputers = computers.filter(
-			(computer) => computer.guestInfo && computer.guestInfo.status === "online"
-		);
+		// Additional validation to ensure we only return truly available computers
+		const availableComputers = computers.filter((computer) => {
+			// Computer must have "available" status and be connected to a guest that's online
+			const isGuestConnected =
+				computer.guestInfo && computer.guestInfo.status === "online";
+			const isAvailable = computer.status === "available";
+			return isGuestConnected && isAvailable;
+		});
 
 		res.json(availableComputers);
 	} catch (error) {

@@ -22,7 +22,7 @@ const ComputerSchema = new mongoose.Schema(
 		},
 		status: {
 			type: String,
-			enum: ["available", "rented", "offline"],
+			enum: ["available", "unavailable", "rented", "offline"],
 			default: "offline",
 		},
 		currentUser: {

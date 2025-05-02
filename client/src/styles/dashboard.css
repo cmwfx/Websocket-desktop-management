@@ -373,3 +373,71 @@
 ::-webkit-scrollbar-thumb:hover {
 	background: var(--secondary-color);
 }
+
+/* Add these styles for the admin tabs */
+.admin-tabs {
+	display: flex;
+	background-color: #f5f5f5;
+	border-bottom: 1px solid #ddd;
+	margin-bottom: 1rem;
+}
+
+.tab-button {
+	padding: 0.8rem 1.5rem;
+	background: none;
+	border: none;
+	border-bottom: 3px solid transparent;
+	cursor: pointer;
+	font-weight: 500;
+	color: #666;
+	transition: all 0.2s ease;
+}
+
+.tab-button:hover {
+	background-color: #e9e9e9;
+	color: #333;
+}
+
+.tab-button.active {
+	border-bottom-color: #2196f3;
+	color: #2196f3;
+	background-color: #fff;
+}
+
+.dashboard-full-width {
+	flex: 1;
+	padding: 1rem;
+	background-color: #f9f9f9;
+	border-radius: 8px;
+	overflow: auto;
+}
+
+/* Add these styles for computer status in the guest list */
+.computer-status {
+	margin-top: 0.5rem;
+	padding: 0.3rem 0.6rem;
+	border-radius: 4px;
+	font-weight: 600;
+	display: inline-block;
+	font-size: 0.85rem;
+}
+
+.status-available {
+	background-color: rgba(76, 175, 80, 0.1);
+	color: #4caf50;
+}
+
+.status-unavailable {
+	background-color: rgba(255, 152, 0, 0.1);
+	color: #ff9800;
+}
+
+.status-rented {
+	background-color: rgba(33, 150, 243, 0.1);
+	color: #2196f3;
+}
+
+.status-offline {
+	background-color: rgba(158, 158, 158, 0.1);
+	color: #9e9e9e;
+}

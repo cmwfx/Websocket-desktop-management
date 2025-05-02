@@ -504,9 +504,14 @@ app.get("/api/connected-guests", async (req, res) => {
 		console.log("In-memory guest IDs:", inMemoryGuestIds);
 		console.log("Full in-memory guests:", guests);
 
-		// Get guests from database
+		// Get guests from database that are either online or were recently active
+		const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 		const dbGuests = await Guest.find({
-			$or: [{ status: "online" }, { guestId: { $in: inMemoryGuestIds } }],
+			$or: [
+				{ status: "online" },
+				{ guestId: { $in: inMemoryGuestIds } },
+				{ lastSeen: { $gte: fiveMinutesAgo } },
+			],
 		}).lean();
 		console.log("Database guests:", JSON.stringify(dbGuests, null, 2));
 
@@ -537,40 +542,36 @@ app.get("/api/connected-guests", async (req, res) => {
 				desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
 			}));
 
+		// Combine all guests
 		const allGuests = [...updatedGuests, ...newGuests];
-		console.log("Final guest list:", JSON.stringify(allGuests, null, 2));
 
-		// Ensure all required fields are present
-		const sanitizedGuests = allGuests.map((guest) => ({
-			guestId: guest.guestId,
-			status: guest.status || "unknown",
-			lastSeen: guest.lastSeen || new Date(),
-			hostname: guest.hostname || "Unknown",
-			ipAddress: guest.ipAddress || "Unknown",
-			osInfo: guest.osInfo || "Unknown",
-			windowsVersion: guest.windowsVersion || "Unknown",
-			desktopEnvironment: guest.desktopEnvironment || "Unknown",
-		}));
-
-		res.json({ guests: sanitizedGuests });
-	} catch (error) {
-		console.error("Error fetching guests:", error);
-		// On error, return at least the in-memory guests with full details
-		const fallbackGuests = Object.keys(guests).map((id) => ({
-			guestId: id,
-			status: "online",
-			lastSeen: new Date(),
-			hostname: guests[id].hostname || "Unknown",
-			ipAddress: guests[id].ipAddress || "Unknown",
-			osInfo: guests[id].osInfo || "Unknown",
-			windowsVersion: guests[id].windowsVersion || "Unknown",
-			desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
-		}));
-		console.log(
-			"Returning fallback guests:",
-			JSON.stringify(fallbackGuests, null, 2)
+		// Fetch computer information for each guest
+		const guestsWithComputerInfo = await Promise.all(
+			allGuests.map(async (guest) => {
+				const computer = await Computer.findOne({
+					guestId: guest.guestId,
+				}).lean();
+				return {
+					...guest,
+					isComputer: !!computer,
+					computerStatus: computer ? computer.status : null,
+					computerId: computer ? computer._id : null,
+				};
+			})
 		);
-		res.json({ guests: fallbackGuests });
+
+		console.log(
+			"Final guest list:",
+			JSON.stringify(guestsWithComputerInfo, null, 2)
+		);
+
+		// Return guest data
+		res.json({
+			guests: guestsWithComputerInfo,
+		});
+	} catch (error) {
+		console.error("Error fetching connected guests:", error);
+		res.status(500).json({ message: "Server error" });
 	}
 });
 
@@ -653,8 +654,90 @@ async function checkExpiredRentals() {
 	}
 }
 
-// Set up a periodic check for expired rentals
-setInterval(checkExpiredRentals, 60000); // Check every minute
+// Function to check for inactive computers and update their status
+async function checkInactiveComputers() {
+	if (!isMongoConnected) return;
 
-// Run an initial check when the server starts
-setTimeout(checkExpiredRentals, 10000); // Wait 10 seconds after server start
+	try {
+		console.log("Checking for inactive computers...");
+
+		// Define the inactive threshold (10 minutes)
+		const inactiveThreshold = new Date(Date.now() - 10 * 60 * 1000);
+
+		// Find all computers with status "available"
+		const computers = await Computer.find({ status: "available" });
+
+		console.log(`Found ${computers.length} computers to check for inactivity`);
+		let inactiveCount = 0;
+
+		// Process each computer
+		for (const computer of computers) {
+			// Find the corresponding guest
+			const guest = await Guest.findOne({ guestId: computer.guestId });
+
+			if (guest) {
+				// Check if the guest is inactive (last seen before the threshold)
+				const isInactive = new Date(guest.lastSeen) < inactiveThreshold;
+				const isConnected = guests[guest.guestId] !== undefined;
+
+				// If inactive and not connected, mark as unavailable
+				if (isInactive && !isConnected && computer.status === "available") {
+					console.log(
+						`Computer ${computer._id} (guest: ${computer.guestId}) is inactive, marking as unavailable`
+					);
+					computer.status = "unavailable";
+					await computer.save();
+					inactiveCount++;
+
+					// Notify clients about the computer status change
+					io.emit("computerUpdate", {
+						computerId: computer._id,
+						status: "unavailable",
+					});
+				}
+				// If computer is unavailable but the guest is now active, mark as available
+				else if (
+					computer.status === "unavailable" &&
+					(isConnected || (!isInactive && guest.status === "online"))
+				) {
+					console.log(
+						`Computer ${computer._id} (guest: ${computer.guestId}) is active again, marking as available`
+					);
+					computer.status = "available";
+					await computer.save();
+
+					// Notify clients about the computer status change
+					io.emit("computerUpdate", {
+						computerId: computer._id,
+						status: "available",
+					});
+				}
+			}
+		}
+
+		console.log(
+			`Updated ${inactiveCount} inactive computers to unavailable status`
+		);
+	} catch (error) {
+		console.error("Error checking inactive computers:", error);
+	}
+}
+
+// Start the periodic checks when the server starts
+let rentalCheckInterval;
+let computerStatusCheckInterval;
+
+if (isMongoConnected) {
+	// Check rentals every 1 minute
+	rentalCheckInterval = setInterval(checkExpiredRentals, 60 * 1000);
+
+	// Check computer activity status every 2 minutes
+	computerStatusCheckInterval = setInterval(
+		checkInactiveComputers,
+		2 * 60 * 1000
+	);
+
+	// Run initial checks
+	checkExpiredRentals();
+	checkInactiveComputers();
+}

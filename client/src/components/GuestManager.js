@@ -48,9 +48,16 @@ const GuestManager = ({
 									<p>IP: {guest.ipAddress || "Unknown"}</p>
 									<p>OS: {guest.osInfo || "Unknown"}</p>
 									<p>Last Seen: {formatLastSeen(guest.lastSeen)}</p>
+									{guest.isComputer && (
+										<p
+											className={`computer-status status-${guest.computerStatus}`}
+										>
+											Computer Status: {guest.computerStatus || "unknown"}
+										</p>
+									)}
 								</div>
 							</div>
-							{onRegisterAsComputer && (
+							{onRegisterAsComputer && !guest.isComputer && (
 								<button
 									className="register-computer-btn"
 									onClick={() => onRegisterAsComputer(guest.guestId)}

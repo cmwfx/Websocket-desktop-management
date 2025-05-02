@@ -7,6 +7,7 @@ import GuestManager from "./GuestManager";
 import CommandPanel from "./CommandPanel";
 import ComputerRental from "./ComputerRental";
 import UserManagement from "./UserManagement";
+import ComputerManagement from "./ComputerManagement";
 import "../styles/dashboard.css";
 
 // Use relative URLs in production:
@@ -22,6 +23,7 @@ const Dashboard = () => {
 	const [commandResults, setCommandResults] = useState([]);
 	const [isConnected, setIsConnected] = useState(false);
 	const [showUserMenu, setShowUserMenu] = useState(false);
+	const [activeTab, setActiveTab] = useState("guests"); // Add active tab state for admin view
 	const { auth, logout } = useAuth();
 	const navigate = useNavigate();
 
@@ -191,58 +193,97 @@ const Dashboard = () => {
 				</div>
 			</div>
 
+			{isAdmin && (
+				<div className="admin-tabs">
+					<button
+						className={`tab-button ${activeTab === "guests" ? "active" : ""}`}
+						onClick={() => setActiveTab("guests")}
+					>
+						Guest Management
+					</button>
+					<button
+						className={`tab-button ${
+							activeTab === "computers" ? "active" : ""
+						}`}
+						onClick={() => setActiveTab("computers")}
+					>
+						Computer Management
+					</button>
+					<button
+						className={`tab-button ${activeTab === "users" ? "active" : ""}`}
+						onClick={() => setActiveTab("users")}
+					>
+						User Management
+					</button>
+				</div>
+			)}
+
 			<div className="dashboard-content">
 				{isAdmin ? (
-					// Admin view - show guest management, command panel, and user management
+					// Admin view - show different content based on active tab
 					<>
-						<div className="dashboard-sidebar">
-							<GuestManager
-								guests={guests}
-								selectedGuest={selectedGuest}
-								onSelectGuest={handleGuestSelect}
-								onRegisterAsComputer={handleRegisterAsComputer}
-							/>
-						</div>
-
-						<div className="dashboard-main">
-							<CommandPanel
-								selectedGuest={selectedGuest}
-								onSendCommand={handleSendCommand}
-							/>
-
-							<div className="command-results">
-								<h3>Command Results</h3>
-								<div className="results-list">
-									{commandResults.length === 0 ? (
-										<p>No command results yet</p>
-									) : (
-										commandResults.map((result, index) => (
-											<div
-												key={index}
-												className={`result-item ${
-													result.success ? "success" : "error"
-												}`}
-											>
-												<div className="result-header">
-													<span className="guest-id">{result.guestId}</span>
-													<span className="action">{result.action}</span>
-													<span className="status">
-														{result.success ? "Success" : "Failed"}
-													</span>
-												</div>
-												{result.error && (
-													<div className="error-message">{result.error}</div>
-												)}
-											</div>
-										))
-									)}
+						{activeTab === "guests" && (
+							<>
+								<div className="dashboard-sidebar">
+									<GuestManager
+										guests={guests}
+										selectedGuest={selectedGuest}
+										onSelectGuest={handleGuestSelect}
+										onRegisterAsComputer={handleRegisterAsComputer}
+									/>
 								</div>
-							</div>
 
-							<div className="user-management-section">
+								<div className="dashboard-main">
+									<CommandPanel
+										selectedGuest={selectedGuest}
+										onSendCommand={handleSendCommand}
+									/>
+
+									<div className="command-results">
+										<h3>Command Results</h3>
+										<div className="results-list">
+											{commandResults.length === 0 ? (
+												<p>No command results yet</p>
+											) : (
+												commandResults.map((result, index) => (
+													<div
+														key={index}
+														className={`result-item ${
+															result.success ? "success" : "error"
+														}`}
+													>
+														<div className="result-header">
+															<span className="guest-id">{result.guestId}</span>
+															<span className="action">{result.action}</span>
+															<span className="status">
+																{result.success ? "Success" : "Failed"}
+															</span>
+														</div>
+														{result.error && (
+															<div className="error-message">
+																{result.error}
+															</div>
+														)}
+													</div>
+												))
+											)}
+										</div>
+									</div>
+								</div>
+							</>
+						)}
+
+						{activeTab === "computers" && (
+							<div className="dashboard-full-width">
+								<ComputerManagement />
+							</div>
+						)}
+
+						{activeTab === "users" && (
+							<div className="dashboard-full-width">
 								<UserManagement />
 							</div>
-						</div>
+						)}
 					</>
 				) : (
 					// Regular user view - show computer rental interface
