@@ -33,16 +33,24 @@ const Dashboard = () => {
 			setLoading(true);
 			console.log("Fetching guests and computers...");
 			const response = await axios.get("/api/connected-guests");
-			if (response.data.guests) {
+			console.log("Guest API Response:", response);
+			if (response.data && response.data.guests) {
 				console.log("Received guests/computers:", response.data.guests.length);
 				setGuests(response.data.guests);
 			} else {
-				console.warn("No guests returned from API");
+				console.warn(
+					"No guests returned from API. Response data:",
+					response.data
+				);
+				// Initialize with empty array instead of leaving previous state
+				setGuests([]);
 			}
 			setLoading(false);
 		} catch (error) {
 			console.error("Error fetching guests:", error);
 			setLoading(false);
+			// Initialize with empty array on error
+			setGuests([]);
 		}
 	}, []);
 

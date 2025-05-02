@@ -497,19 +497,41 @@ app.post("/api/send-command", async (req, res) => {
 // API endpoint to get all connected guests
 app.get("/api/connected-guests", async (req, res) => {
 	try {
+		console.log("==========================================");
 		console.log("Fetching connected guests...");
+		console.log("MongoDB connected:", isMongoConnected);
 
 		// Get in-memory guests with full details
 		const inMemoryGuestIds = Object.keys(guests);
 		console.log("In-memory guest IDs:", inMemoryGuestIds);
-		console.log("Full in-memory guests:", guests);
+		console.log("Number of in-memory guests:", inMemoryGuestIds.length);
+
+		if (!isMongoConnected) {
+			console.log("MongoDB not connected, returning in-memory guests only");
+			const inMemoryGuestsArray = inMemoryGuestIds.map((id) => ({
+				guestId: id,
+				status: "online",
+				lastSeen: new Date(),
+				hostname: guests[id].hostname || "Unknown",
+				ipAddress: guests[id].ipAddress || "Unknown",
+				osInfo: guests[id].osInfo || "Unknown",
+				windowsVersion: guests[id].windowsVersion || "Unknown",
+				desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
+				isComputer: false,
+			}));
+
+			console.log("Returning in-memory guests:", inMemoryGuestsArray.length);
+			return res.json({ guests: inMemoryGuestsArray });
+		}
 
 		// Get guests from database that are either online, were recently active, or are registered as computers
 		const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
 		// First get all registered computers to ensure they are included
 		const computers = await Computer.find({}).lean();
+		console.log("Found computers:", computers.length);
 		const computerGuestIds = computers.map((computer) => computer.guestId);
+		console.log("Computer guest IDs:", computerGuestIds);
 
 		// Find all guests that match our criteria
 		const dbGuests = await Guest.find({
@@ -520,7 +542,7 @@ app.get("/api/connected-guests", async (req, res) => {
 			],
 		}).lean();
 
-		console.log("Database guests:", JSON.stringify(dbGuests, null, 2));
+		console.log("Database guests found:", dbGuests.length);
 
 		// Update status of guests based on in-memory state
 		const updatedGuests = dbGuests.map((guest) => {
@@ -549,36 +571,56 @@ app.get("/api/connected-guests", async (req, res) => {
 				desktopEnvironment: guests[id].desktopEnvironment || "Unknown",
 			}));
 
+		console.log("New in-memory guests not in DB:", newGuests.length);
+
 		// Combine all guests
 		const allGuests = [...updatedGuests, ...newGuests];
+		console.log("Combined guests before computer info:", allGuests.length);
 
 		// Fetch computer information for each guest
 		const guestsWithComputerInfo = await Promise.all(
 			allGuests.map(async (guest) => {
-				const computer = await Computer.findOne({
-					guestId: guest.guestId,
-				}).lean();
-				return {
-					...guest,
-					isComputer: !!computer,
-					computerStatus: computer ? computer.status : null,
-					computerId: computer ? computer._id : null,
-				};
+				try {
+					const computer = await Computer.findOne({
+						guestId: guest.guestId,
+					}).lean();
+
+					return {
+						...guest,
+						isComputer: !!computer,
+						computerStatus: computer ? computer.status : null,
+						computerId: computer ? computer._id : null,
+					};
+				} catch (err) {
+					console.error(
+						`Error getting computer info for guest ${guest.guestId}:`,
+						err
+					);
+					return {
+						...guest,
+						isComputer: false,
+						computerStatus: null,
+						computerId: null,
+					};
+				}
 			})
 		);
 
-		console.log(
-			"Final guest list:",
-			JSON.stringify(guestsWithComputerInfo, null, 2)
-		);
+		console.log("Final guest list count:", guestsWithComputerInfo.length);
 
 		// Return guest data
 		res.json({
 			guests: guestsWithComputerInfo,
 		});
+		console.log("Response sent successfully");
+		console.log("==========================================");
 	} catch (error) {
 		console.error("Error fetching connected guests:", error);
-		res.status(500).json({ message: "Server error" });
+		// Send a fallback response with empty guests array
+		res.json({
+			guests: [],
+			error: error.message,
+		});
 	}
 });
 
